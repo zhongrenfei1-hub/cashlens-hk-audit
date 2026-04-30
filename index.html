@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cashlens · 现金透镜 · 香港审计流水分析</title>
+<meta name="description" content="香港 SME 银行月结单 AI 审计分析工具 · HKSA 230 / SME-FRS / IRO 合规" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        base: '#0A0A0B', surface: '#141416', elevated: '#1C1C1F', input: '#0F0F11',
+        subtle: '#27272A', line: '#3F3F46',
+        fg1: '#FAFAFA', fg2: '#A1A1AA', fg3: '#71717A',
+        accent: '#8B5CF6', accent2: '#A78BFA',
+        ok: '#10B981', warn: '#F59E0B', err: '#EF4444',
+      },
+      fontFamily: {
+        sans: ['-apple-system', '"SF Pro Text"', 'Inter', '"PingFang SC"', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', '"SF Mono"', 'Consolas', 'monospace'],
+      }
+    }
+  }
+}
+</script>
+<style>
+  html { background: #0A0A0B; }
+  body { font-feature-settings: "cv02","cv03","cv04","cv11"; -webkit-font-smoothing: antialiased; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 4px; }
+  .scrollbar::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+  .focus-glow:focus { box-shadow: 0 0 0 3px rgba(139,92,246,0.35); outline: none; }
+  @keyframes aiPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(.9)} }
+  .ai-pulse { animation: aiPulse 1.6s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .caret::after { content: '▍'; margin-left: 1px; animation: blink 1s step-end infinite; color: #8B5CF6; }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  .card-in { animation: cardIn 360ms cubic-bezier(0.2,0,0,1) both; }
+  .dropzone-active { border-color: #8B5CF6 !important; background: rgba(139,92,246,0.06); transform: scale(1.01); }
+  .accent-bg { background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%); }
+  .card { transition: transform 120ms cubic-bezier(0.2,0,0,1), border-color 120ms; }
+  .card:hover { transform: translateY(-1px); border-color: #3F3F46; }
+  .chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; font-size:11.5px; font-weight:500; }
+  @keyframes dotJump { 0%,80%,100%{transform:translateY(0);opacity:.4} 40%{transform:translateY(-3px);opacity:1} }
+  .dot { animation: dotJump 1.2s ease-in-out infinite; }
+  .dot:nth-child(2) { animation-delay: 0.15s; }
+  .dot:nth-child(3) { animation-delay: 0.3s; }
+  input[type=file] { display: none; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+  /* Markdown styles */
+  .md h1 { font-size: 17px; font-weight: 700; color: #FAFAFA; margin: 16px 0 10px; }
+  .md h2 { font-size: 15px; font-weight: 600; color: #FAFAFA; margin: 14px 0 8px; }
+  .md h3 { font-size: 14px; font-weight: 600; color: #FAFAFA; margin: 12px 0 6px; }
+  .md p { margin: 6px 0; line-height: 1.65; }
+  .md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+  .md li { margin: 3px 0; line-height: 1.6; }
+  .md code { background: #1C1C1F; padding: 1px 5px; border-radius: 4px; font-family: "JetBrains Mono", monospace; font-size: 12.5px; color: #A78BFA; }
+  .md pre { background: #0F0F11; border: 1px solid #27272A; border-radius: 8px; padding: 12px; overflow-x: auto; margin: 10px 0; }
+  .md pre code { background: transparent; padding: 0; color: #FAFAFA; font-size: 12px; }
+  .md table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+  .md th { background: #1C1C1F; color: #A1A1AA; padding: 8px 10px; text-align: left; font-weight: 500; border: 1px solid #27272A; font-size: 12px; }
+  .md td { padding: 7px 10px; border: 1px solid #27272A; color: #FAFAFA; font-variant-numeric: tabular-nums; }
+  .md tr:hover td { background: rgba(139,92,246,0.04); }
+  .md strong { color: #FAFAFA; font-weight: 600; }
+  .md blockquote { border-left: 3px solid #8B5CF6; padding-left: 12px; color: #A1A1AA; margin: 10px 0; }
+</style>
+</head>
+<body class="bg-base text-fg1 font-sans h-screen overflow-hidden">
+
+<!-- ═════════════ TopBar ═════════════ -->
+<header class="h-14 border-b border-subtle flex items-center px-5 gap-4">
+  <div class="flex items-center gap-2.5 mr-2">
+    <div class="w-7 h-7 rounded-lg accent-bg flex items-center justify-center text-white text-sm">🔮</div>
+    <div>
+      <div class="text-[15px] font-semibold tracking-tight">Cashlens</div>
+    </div>
+    <div class="text-[11px] text-fg3 font-medium hidden md:block ml-1">现金透镜</div>
+  </div>
+
+  <button id="companyBtn" onclick="openCompanyEditor()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-elevated text-sm transition">
+    <span class="w-5 h-5 rounded-md bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-[10px] font-bold" id="companyAvatar">M</span>
+    <span class="text-fg1" id="companyLabel">Miheng Trading Limited</span>
+    <svg class="w-3.5 h-3.5 text-fg3" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </button>
+
+  <div class="flex-1"></div>
+
+  <div id="costChip" class="chip bg-surface border border-subtle text-fg2">
+    <span class="w-1.5 h-1.5 rounded-full bg-fg3"></span>
+    <span class="tabular">$0.00</span>
+    <span class="text-fg3">·</span>
+    <span>本次会话</span>
+  </div>
+
+  <button onclick="openSettings()" class="w-8 h-8 rounded-lg hover:bg-elevated flex items-center justify-center text-fg2 transition" title="设置">
+    <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v2M8 13v2M15 8h-2M3 8H1M12.95 3.05l-1.4 1.4M4.45 11.55l-1.4 1.4M12.95 12.95l-1.4-1.4M4.45 4.45l-1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+  </button>
+
+  <button id="exportBtn" onclick="exportReport()" disabled class="px-3 py-1.5 rounded-lg accent-bg text-white text-sm font-medium hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1.5">
+    <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M3.5 5.5L7 9l3.5-3.5M2 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    导出
+  </button>
+</header>
+
+<!-- ═════════════ 3-column Layout ═════════════ -->
+<div class="flex h-[calc(100vh-56px)]">
+
+  <!-- Sidebar -->
+  <aside class="w-64 border-r border-subtle flex flex-col bg-base">
+    <div class="p-3">
+      <button onclick="newSession()" class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-subtle hover:border-line hover:bg-elevated text-sm font-medium transition">
+        <svg class="w-4 h-4 text-accent2" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        新分析
+      </button>
+    </div>
+
+    <div class="px-3 pb-2">
+      <div class="text-[11px] font-medium text-fg3 px-2 mb-1.5 tracking-wide uppercase">历史项目</div>
+      <div id="projectList" class="space-y-0.5"></div>
+    </div>
+
+    <div class="flex-1"></div>
+
+    <div class="p-3 border-t border-subtle space-y-1">
+      <a href="https://docs.anthropic.com/en/api/getting-started" target="_blank" class="flex items-center justify-between px-2.5 py-1.5 rounded-md hover:bg-surface text-fg3 hover:text-fg1 text-[12px] transition">
+        <span>📖 API 文档</span>
+        <span>↗</span>
+      </a>
+      <button onclick="openSettings()" class="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md hover:bg-surface text-fg3 hover:text-fg1 text-[12px] transition">
+        <span>⚙️ 设置 / API Key</span>
+        <span id="apiKeyDot" class="w-1.5 h-1.5 rounded-full bg-warn"></span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 flex flex-col bg-base min-w-0">
+
+    <div id="streamContainer" class="flex-1 overflow-y-auto scrollbar">
+
+      <!-- Empty state -->
+      <div id="emptyState" class="h-full flex flex-col items-center justify-center px-8 py-12">
+        <div id="dropzone" class="w-full max-w-2xl border-2 border-dashed border-subtle rounded-2xl p-12 text-center transition-all hover:border-line cursor-pointer">
+          <div class="w-14 h-14 mx-auto mb-5 rounded-2xl bg-elevated border border-subtle flex items-center justify-center">
+            <svg class="w-6 h-6 text-accent2" viewBox="0 0 24 24" fill="none">
+              <path d="M12 4v12M7 9l5-5 5 5M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h2 class="text-xl font-semibold text-fg1 mb-2">把月结单拖到这里</h2>
+          <p class="text-sm text-fg2 mb-1">支持多 PDF · 单文件最大 30 MB · 全部文件总计建议 ≤ 100 MB</p>
+          <p class="text-[12px] text-fg3 mb-6">大新 · 恒生 · 渣打 · HSBC · BOC · DBS · Airwallex 等 12 家银行格式</p>
+          <label for="fileInput" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-elevated border border-subtle hover:border-line text-sm font-medium cursor-pointer transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M11 7H3M11 7l-3-3M11 7l-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-90 7 7)"/></svg>
+            选择文件
+          </label>
+          <input id="fileInput" type="file" multiple accept="application/pdf,image/*" />
+        </div>
+
+        <div class="mt-6 max-w-2xl w-full">
+          <div class="text-[11px] font-medium text-fg3 mb-3 tracking-wide uppercase">💡 开始之前</div>
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="openSettings()" class="card text-left bg-surface border border-subtle rounded-xl p-4 hover:bg-elevated">
+              <div class="text-fg2 text-[11px] mb-1.5">▸ 第一步</div>
+              <div class="text-fg1 text-[13px] font-medium">配置 API Key</div>
+              <div class="text-fg3 text-[11px] mt-1">从 console.anthropic.com 获取</div>
+            </button>
+            <button onclick="document.getElementById('fileInput').click()" class="card text-left bg-surface border border-subtle rounded-xl p-4 hover:bg-elevated">
+              <div class="text-fg2 text-[11px] mb-1.5">▸ 第二步</div>
+              <div class="text-fg1 text-[13px] font-medium">上传月结单 PDF</div>
+              <div class="text-fg3 text-[11px] mt-1">单文件 / 多文件均可</div>
+            </button>
+            <button onclick="showAbout()" class="card text-left bg-surface border border-subtle rounded-xl p-4 hover:bg-elevated">
+              <div class="text-fg2 text-[11px] mb-1.5">▸ 关于</div>
+              <div class="text-fg1 text-[13px] font-medium">提示词 v4.0 · HKSA 230</div>
+              <div class="text-fg3 text-[11px] mt-1">查看排除规则与汇率政策</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat stream -->
+      <div id="chatStream" class="hidden max-w-3xl mx-auto px-6 py-6 space-y-5"></div>
+    </div>
+
+    <!-- File staging area (between empty state and analysis start) -->
+    <div id="fileStaging" class="hidden border-t border-subtle px-6 py-3 bg-base">
+      <div class="max-w-3xl mx-auto">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-[12px] text-fg2"><span id="fileCount" class="text-fg1 font-medium">0</span> 文件 · <span id="fileSize" class="tabular">0 KB</span></div>
+          <div class="flex gap-2">
+            <button onclick="clearFiles()" class="text-[11.5px] text-fg3 hover:text-fg1">清空</button>
+            <button onclick="document.getElementById('fileInput').click()" class="text-[11.5px] text-accent2 hover:text-accent">+ 添加更多</button>
+          </div>
+        </div>
+        <div id="filePills" class="flex flex-wrap gap-1.5 mb-3 max-h-32 overflow-y-auto scrollbar"></div>
+        <div class="flex items-center gap-3">
+          <input id="companyInput" type="text" placeholder="公司全称" value="Miheng Trading Limited"
+                 class="bg-input border border-subtle rounded-lg px-3 py-1.5 text-[12.5px] flex-1 focus-glow" />
+          <input id="periodStart" type="date" value="2025-04-01"
+                 class="bg-input border border-subtle rounded-lg px-2 py-1.5 text-[12px] focus-glow" />
+          <span class="text-fg3 text-[12px]">至</span>
+          <input id="periodEnd" type="date" value="2026-03-31"
+                 class="bg-input border border-subtle rounded-lg px-2 py-1.5 text-[12px] focus-glow" />
+          <button id="analyzeBtn" onclick="startAnalysis()" class="accent-bg text-white px-4 py-2 rounded-lg text-[13px] font-medium hover:opacity-90 transition flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            开始分析
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Composer (chat mode follow-ups) -->
+    <div id="composer" class="hidden border-t border-subtle px-6 py-4">
+      <div class="max-w-3xl mx-auto">
+        <div class="bg-input border border-subtle rounded-2xl px-4 py-2.5 focus-within:border-line transition">
+          <textarea id="composerInput" rows="1" placeholder="问问关于这份流水的任何事…  例:列出所有大额交易"
+                    class="w-full bg-transparent resize-none outline-none text-sm placeholder:text-fg3 leading-relaxed"></textarea>
+          <div class="flex items-center justify-between mt-1.5">
+            <span class="text-[11px] text-fg3" id="modelLabel">Claude Sonnet · 思考关闭</span>
+            <button onclick="sendFollowup()" class="w-8 h-8 rounded-lg accent-bg text-white flex items-center justify-center hover:opacity-90 transition" title="发送">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M7 11V3M3.5 6.5L7 3l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="text-[10.5px] text-fg3 mt-2 text-center">
+          API Key 仅存于本机浏览器,不上传任何服务器  ·  ⌘ + Enter 发送
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Right detail panel -->
+  <aside class="w-80 border-l border-subtle bg-base hidden xl:flex flex-col">
+    <div class="p-4 border-b border-subtle">
+      <div class="text-[11px] font-medium text-fg3 tracking-wide uppercase mb-1">本次分析</div>
+      <div class="text-[13px] text-fg2" id="detailHeader">准备就绪</div>
+    </div>
+    <div id="detailContent" class="flex-1 overflow-y-auto scrollbar p-4 space-y-4">
+      <div>
+        <div class="text-[11px] font-medium text-fg3 tracking-wide uppercase mb-2">规则速览</div>
+        <div class="text-[12px] text-fg2 space-y-1.5">
+          <div class="flex items-start gap-1.5"><span class="text-ok mt-0.5">✓</span><span>计入: 汇入汇款 / 支票 / FPS / CHATS / e-Cheque / AR 回款 / POS / 支付平台</span></div>
+          <div class="flex items-start gap-1.5"><span class="text-err mt-0.5">✗</span><span>排除: 利息 / 定存 / 内部兑换 / 关联方 / 银行费用 / 出账 / 信用卡还款 / 股东注资</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="text-[11px] font-medium text-fg3 tracking-wide uppercase mb-2">汇率政策</div>
+        <div class="text-[12px] text-fg2 space-y-1">
+          <div>1. 银行月结单实际汇率</div>
+          <div>2. HKMA 当日中间价</div>
+          <div>3. HKMA 月平均中间价</div>
+          <div>4. 财政司司长汇率(税表用)</div>
+        </div>
+      </div>
+      <div>
+        <div class="text-[11px] font-medium text-fg3 tracking-wide uppercase mb-2">引用条款</div>
+        <div class="flex flex-wrap gap-1">
+          <span class="chip bg-elevated text-accent2 border border-subtle font-mono">IRO s.14</span>
+          <span class="chip bg-elevated text-accent2 border border-subtle font-mono">IRO s.15(1)(f)</span>
+          <span class="chip bg-elevated text-accent2 border border-subtle font-mono">IRO s.16(1)</span>
+          <span class="chip bg-elevated text-accent2 border border-subtle font-mono">IRO s.61A</span>
+          <span class="chip bg-elevated text-accent2 border border-subtle font-mono">DIPN 21</span>
+          <span class="chip bg-elevated text-accent2 border border-subtle font-mono">DIPN 46</span>
+          <span class="chip bg-elevated text-accent2 border border-subtle font-mono">SME-FRS Sec.4</span>
+          <span class="chip bg-elevated text-accent2 border border-subtle font-mono">HKSA 230</span>
+        </div>
+      </div>
+    </div>
+    <div class="p-3 border-t border-subtle text-[10.5px] text-fg3 text-center">
+      v4.0 · HKSA 230 / SME-FRS / IRO Cap.112
+    </div>
+  </aside>
+
+</div>
+
+<!-- ═════════════ Settings Modal ═════════════ -->
+<div id="settingsModal" class="modal-backdrop hidden">
+  <div class="bg-surface rounded-2xl border border-subtle shadow-2xl w-[540px] max-h-[90vh] overflow-y-auto scrollbar">
+    <div class="px-5 py-4 border-b border-subtle flex items-center justify-between">
+      <div class="text-[15px] font-semibold">设置</div>
+      <button onclick="closeSettings()" class="w-7 h-7 rounded hover:bg-elevated text-fg3 text-lg">✕</button>
+    </div>
+    <div class="p-5 space-y-5">
+
+      <div>
+        <label class="block text-[12px] font-medium text-fg2 mb-1.5">Anthropic API Key</label>
+        <div class="flex items-center gap-2">
+          <input id="apiKeyInput" type="password" placeholder="sk-ant-api03-…" autocomplete="off"
+                 class="flex-1 bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] font-mono focus-glow" />
+          <button onclick="toggleKeyVisibility()" id="toggleKeyBtn" class="px-2.5 py-2 rounded-lg bg-elevated border border-subtle hover:border-line text-[11.5px] text-fg2">显示</button>
+        </div>
+        <div class="mt-2 text-[11px] text-fg3 leading-relaxed">
+          密钥只保存在你浏览器的 localStorage,从不发往任何第三方服务器(只发到 api.anthropic.com)。
+          <a href="https://console.anthropic.com/settings/keys" target="_blank" class="text-accent2 hover:text-accent">获取 Key →</a>
+        </div>
+        <div id="keyTestResult" class="mt-2 text-[11.5px] hidden"></div>
+      </div>
+
+      <div>
+        <label class="block text-[12px] font-medium text-fg2 mb-1.5">模型</label>
+        <select id="modelSelect" class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] focus-glow">
+          <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5(性价比 · 推荐)</option>
+          <option value="claude-opus-4-5-20250929">Claude Opus 4.5(最强)</option>
+          <option value="claude-haiku-4-5">Claude Haiku 4.5(最快最便宜)</option>
+          <option value="custom">自定义…</option>
+        </select>
+        <input id="customModel" type="text" placeholder="例: claude-opus-4-7-20260301"
+               class="hidden mt-2 w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] font-mono focus-glow" />
+      </div>
+
+      <div>
+        <label class="flex items-center justify-between text-[12px] font-medium text-fg2 mb-1.5">
+          <span>Extended Thinking 思考预算</span>
+          <span id="thinkingValue" class="tabular text-fg3">0</span>
+        </label>
+        <input id="thinkingSlider" type="range" min="0" max="32000" step="1000" value="0"
+               class="w-full accent-accent" />
+        <div class="text-[11px] text-fg3 mt-1">0 = 关闭。建议 8K~16K(更深入,但更慢更贵)。</div>
+      </div>
+
+      <div>
+        <label class="block text-[12px] font-medium text-fg2 mb-1.5">最大输出 Tokens</label>
+        <input id="maxTokens" type="number" value="16384" step="1024" min="1024" max="64000"
+               class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] tabular focus-glow" />
+      </div>
+
+      <details class="border border-subtle rounded-lg p-3">
+        <summary class="text-[12px] font-medium text-fg2 flex items-center justify-between">
+          <span>高级:系统提示词 v4.0</span>
+          <span class="text-fg3 text-[10.5px]">点击展开/折叠</span>
+        </summary>
+        <textarea id="systemPromptInput" rows="8" class="mt-3 w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[11px] font-mono leading-relaxed focus-glow"></textarea>
+        <div class="flex justify-between mt-2">
+          <button onclick="resetPrompt()" class="text-[11.5px] text-fg3 hover:text-fg1">↻ 还原默认</button>
+          <span class="text-[10.5px] text-fg3">这是核心审计规则,改之前先看 README</span>
+        </div>
+      </details>
+
+    </div>
+    <div class="px-5 py-3 border-t border-subtle flex items-center justify-between">
+      <button onclick="testApiKey()" class="text-[12.5px] text-accent2 hover:text-accent flex items-center gap-1.5">
+        <span id="testIcon">🔌</span>
+        <span id="testLabel">测试连接</span>
+      </button>
+      <div class="flex gap-2">
+        <button onclick="closeSettings()" class="px-3 py-1.5 rounded-lg text-[12.5px] text-fg2 hover:bg-elevated">取消</button>
+        <button onclick="saveSettings()" class="accent-bg text-white px-4 py-1.5 rounded-lg text-[12.5px] font-medium hover:opacity-90">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════════ About Modal ═════════════ -->
+<div id="aboutModal" class="modal-backdrop hidden">
+  <div class="bg-surface rounded-2xl border border-subtle shadow-2xl w-[600px] max-h-[80vh] overflow-y-auto scrollbar">
+    <div class="px-5 py-4 border-b border-subtle flex items-center justify-between">
+      <div class="text-[15px] font-semibold">关于 Cashlens · 提示词 v4.0</div>
+      <button onclick="document.getElementById('aboutModal').classList.add('hidden')" class="w-7 h-7 rounded hover:bg-elevated text-fg3 text-lg">✕</button>
+    </div>
+    <div class="p-5 text-[13px] text-fg2 space-y-4 leading-relaxed">
+      <div>
+        <div class="text-fg1 font-semibold mb-1">产品</div>
+        Cashlens 是给香港中小企业 / 审计师事务所用的银行月结单流水分析工具。基于 Anthropic Claude API,符合 HKSA 230 工作底稿要求。
+      </div>
+      <div>
+        <div class="text-fg1 font-semibold mb-1">数据安全</div>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>全部前端运行,无后端服务器</li>
+          <li>API Key 加密存于浏览器 localStorage</li>
+          <li>PDF 仅在你浏览器内 base64,直接通过 HTTPS 发往 api.anthropic.com</li>
+          <li>关闭网页 = 数据自动清除(localStorage 除外)</li>
+        </ul>
+      </div>
+      <div>
+        <div class="text-fg1 font-semibold mb-1">v4.0 排除规则</div>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>利息 / 定存 / 内部兑换 / 关联方 / 银行费用 / 出账 / 信用卡还款 / 股东注资</li>
+          <li>每笔 borderline 必须在审计轨迹引用 IRO / DIPN / SME-FRS 条款</li>
+        </ul>
+      </div>
+      <div>
+        <div class="text-fg1 font-semibold mb-1">汇率政策</div>
+        <ol class="list-decimal pl-5 space-y-1">
+          <li>银行月结单实际汇率(若有)</li>
+          <li>HKMA 当日中间价</li>
+          <li>HKMA 月平均中间价</li>
+          <li>财政司司长汇率(仅税表)</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════════ Toast ═════════════ -->
+<div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-[200] hidden">
+  <div id="toastBody" class="bg-surface border border-subtle rounded-lg shadow-2xl px-4 py-2.5 text-[13px] text-fg1 flex items-center gap-2"></div>
+</div>
+
+<!-- ═════════════ Logic ═════════════ -->
+<script>
+// ─────────── Constants ───────────
+const SYSTEM_PROMPT_V4 = `You are a Senior Hong Kong Audit Manager (HKICPA-qualified) specializing in:
+- SME bank reconciliation under SME-FRS
+- HK Profits Tax computation (Inland Revenue Ordinance Cap. 112)
+- Bank statement formats: Dah Sing, Hang Seng, Standard Chartered, HSBC,
+  Bank of China (HK), Airwallex, ZA Bank, WeLab, Fubon, BEA, Citi HK, DBS HK/CN.
+
+PRIMARY TASK: Analyze HK bank monthly statements (PDFs) and compute the
+Net Valid Inbound Cash Flow (有效净进账金额) — only genuine external business
+receipts that contribute to revenue/turnover for tax purposes.
+
+[INCLUDE — 必须计入]
+- 境外汇入汇款(Inward Remittance / TT-IN / SWIFT MT103)
+- 客户支票存入(Cheque Deposit / In-Clearing,需匹配 payer 为外部客户)
+- FPS 转数快收款(付款人非关联方)
+- CHATS / RTGS 收款(港币即时支付,需核对 originator)
+- e-Cheque 电子支票存入(payer 为外部客户)
+- 应收账款回款(AR settlement,凭参考号匹配 invoice)
+- POS / 信用卡商户结算(扣减手续费后的 net)
+- 支付平台清算入账(Stripe/PayPal/Airwallex Payout,需还原至 gross)
+
+[EXCLUDE — 必须排除]
+- 利息收入、定存到期本金返还
+- 内部兑换转账(同主体不同币种)
+- 跨行/同集团内部调拨(关联方/股东付款)
+- 银行费用、印花税、利息支出
+- 退款冲正(Reversal / R/D Cheque)
+- 信用卡还款(出账)
+- 董事/股东往来(融资活动)
+- 错账/系统冲销
+
+[BORDERLINE — 在审计轨迹中逐笔判断]
+- FPS 收款付款人不明 → 默认 INCLUDE,标注 "Unverified Payer"
+- 关联方付款但有真实贸易合同 → INCLUDE,引用 IRD DIPN 46
+- Airwallex/Stripe 多币种汇总入账 → 拆分为底层交易
+- 退货退款入账 → 若对应原销售已确认收入,EXCLUDE
+- 员工报销退回 → EXCLUDE
+- 股东注资 → EXCLUDE,在权益变动表披露
+
+[汇率政策]
+优先级:① 银行月结单当日已记录的实际汇率 → ② HKMA 当日中间价
+       → ③ HKMA 当月平均中间价 → ④ 财政司司长指定汇率(仅税表)
+精度:USD/HKD 4 位小数,CNY/HKD 4 位,JPY/HKD 6 位
+偏离 ±2% 以上必须在审计轨迹说明。
+
+[Excel 输出标准]
+必须输出 4 张 Sheet 的复制即用代码块(全部用 \`\`\`tsv 包裹,以制表符分隔):
+  Sheet 1 汇总表: 月份|币种|原币进账|原币排除|原币净进账|月平均汇率|折合HKD|备注
+  Sheet 2 有效进账明细: #|日期|银行|账户末四位|类型|币种|原币|折合HKD|对方|参考号|页码|备注
+  Sheet 3 已排除明细: #|日期|银行|类型|币种|金额|排除理由|引用规则编号
+  Sheet 4 审计轨迹: #|日期|金额HKD|描述|初步判断|最终判断|判断依据|引用条款|复核人|复核日期
+
+[审计轨迹引用规范]
+每笔 borderline 必含 7 项:交易特征 / 初步分类 / 争议点 / 适用准则
+(SME-FRS Sec.X 或 IRO Sec.Y 或 DIPN Z)/ 类比案例 / 最终判断 + 复核栏 / 影响金额。
+
+常用条款速查:
+  IRO s.14 / s.15(1)(f) / s.16(1) / s.61A
+  DIPN 21 / DIPN 46
+  SME-FRS Sec.2 / Sec.4 / HKFRS 15
+  HKSA 230 / HKSA 500 / HKSA 540
+
+[输出 6 大模块,简体中文,顺序固定]
+① 执行摘要 ② 按月汇总表 ③ 有效进账明细 ④ 已排除项目明细
+⑤ 汇率政策与数据质量 ⑥ 审计轨迹
+
+[严格执行规则]
+1. 高分辨率视觉提取所有交易字段
+2. 所有加总必须自验,误差为 0.00
+3. 多币种使用规定的汇率优先级
+4. 输出语言:简体中文,术语保留中英对照
+5. PDF 缺失页/不可读 → 列入"数据质量"段落
+6. 金额三位一撇,港币 2 位小数,原币按银行精度
+7. 末尾追加 Audit Sign-off Block:日期、底稿编号、Prepared/Reviewed by
+8. 遵循 HKSA 230:经验丰富的审计师能在不接触执行人的情况下理解工作`;
+
+// Pricing per 1M tokens (USD) — adjust if Anthropic updates
+const PRICING = {
+  'claude-opus-4-5-20250929': { in: 15, out: 75 },
+  'claude-opus-4-7-20260301': { in: 15, out: 75 },
+  'claude-sonnet-4-5-20250929': { in: 3, out: 15 },
+  'claude-haiku-4-5': { in: 1, out: 5 },
+};
+
+// ─────────── Settings (localStorage) ───────────
+const SETTINGS_KEY = 'cashlens_settings_v1';
+const PROJECTS_KEY = 'cashlens_projects_v1';
+
+function loadSettings() {
+  try {
+    return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
+  } catch { return {}; }
+}
+function saveSettingsRaw(s) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+function getApiKey() { return loadSettings().apiKey || ''; }
+function getModel() {
+  const s = loadSettings();
+  return s.customModel || s.model || 'claude-sonnet-4-5-20250929';
+}
+function getThinking() { return parseInt(loadSettings().thinking || 0); }
+function getMaxTokens() { return parseInt(loadSettings().maxTokens || 16384); }
+function getSystemPrompt() { return loadSettings().systemPrompt || SYSTEM_PROMPT_V4; }
+
+function updateApiKeyDot() {
+  const dot = document.getElementById('apiKeyDot');
+  const has = !!getApiKey();
+  dot.className = `w-1.5 h-1.5 rounded-full ${has ? 'bg-ok' : 'bg-warn'}`;
+}
+
+function updateModelLabel() {
+  const m = getModel();
+  const t = getThinking();
+  const short = m.replace(/^claude-/, '').replace(/-\d{8}$/, '');
+  document.getElementById('modelLabel').textContent =
+    `Claude ${short} · 思考${t > 0 ? ` ${(t/1000).toFixed(0)}K` : '关闭'}`;
+}
+
+// ─────────── Settings Modal ───────────
+function openSettings() {
+  const s = loadSettings();
+  document.getElementById('apiKeyInput').value = s.apiKey || '';
+  const sel = document.getElementById('modelSelect');
+  if (s.customModel) {
+    sel.value = 'custom';
+    document.getElementById('customModel').classList.remove('hidden');
+    document.getElementById('customModel').value = s.customModel;
+  } else {
+    sel.value = s.model || 'claude-sonnet-4-5-20250929';
+    document.getElementById('customModel').classList.add('hidden');
+  }
+  document.getElementById('thinkingSlider').value = s.thinking || 0;
+  document.getElementById('thinkingValue').textContent = formatThinking(s.thinking || 0);
+  document.getElementById('maxTokens').value = s.maxTokens || 16384;
+  document.getElementById('systemPromptInput').value = s.systemPrompt || SYSTEM_PROMPT_V4;
+  document.getElementById('settingsModal').classList.remove('hidden');
+}
+function closeSettings() {
+  document.getElementById('settingsModal').classList.add('hidden');
+}
+function toggleKeyVisibility() {
+  const inp = document.getElementById('apiKeyInput');
+  const btn = document.getElementById('toggleKeyBtn');
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '隐藏'; }
+  else { inp.type = 'password'; btn.textContent = '显示'; }
+}
+function resetPrompt() {
+  document.getElementById('systemPromptInput').value = SYSTEM_PROMPT_V4;
+}
+function formatThinking(n) { return n === 0 ? '关闭' : `${n.toLocaleString()} tokens`; }
+
+document.getElementById('thinkingSlider')?.addEventListener('input', (e) => {
+  document.getElementById('thinkingValue').textContent = formatThinking(parseInt(e.target.value));
+});
+document.getElementById('modelSelect')?.addEventListener('change', (e) => {
+  document.getElementById('customModel').classList.toggle('hidden', e.target.value !== 'custom');
+});
+
+function saveSettings() {
+  const sel = document.getElementById('modelSelect').value;
+  const settings = {
+    apiKey: document.getElementById('apiKeyInput').value.trim(),
+    model: sel === 'custom' ? null : sel,
+    customModel: sel === 'custom' ? document.getElementById('customModel').value.trim() : null,
+    thinking: parseInt(document.getElementById('thinkingSlider').value),
+    maxTokens: parseInt(document.getElementById('maxTokens').value),
+    systemPrompt: document.getElementById('systemPromptInput').value,
+  };
+  saveSettingsRaw(settings);
+  updateApiKeyDot();
+  updateModelLabel();
+  closeSettings();
+  toast('设置已保存', 'ok');
+}
+
+async function testApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  const sel = document.getElementById('modelSelect').value;
+  const model = sel === 'custom' ? document.getElementById('customModel').value.trim() : sel;
+  const result = document.getElementById('keyTestResult');
+  result.classList.remove('hidden');
+  result.className = 'mt-2 text-[11.5px] text-fg3';
+  result.textContent = '⏳ 测试中…';
+  document.getElementById('testIcon').textContent = '⏳';
+
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model,
+        max_tokens: 8,
+        messages: [{ role: 'user', content: 'ping' }],
+      }),
+    });
+    if (r.ok) {
+      result.className = 'mt-2 text-[11.5px] text-ok';
+      result.textContent = '✓ 连接成功 · API Key 有效';
+    } else {
+      const err = await r.json().catch(() => ({}));
+      result.className = 'mt-2 text-[11.5px] text-err';
+      result.textContent = `✗ ${err.error?.message || `HTTP ${r.status}`}`;
+    }
+  } catch (e) {
+    result.className = 'mt-2 text-[11.5px] text-err';
+    result.textContent = `✗ ${e.message}`;
+  }
+  document.getElementById('testIcon').textContent = '🔌';
+}
+
+// ─────────── Toast ───────────
+function toast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  const body = document.getElementById('toastBody');
+  const colors = { info: 'text-fg1', ok: 'text-ok', err: 'text-err', warn: 'text-warn' };
+  const icons = { info: 'ℹ️', ok: '✓', err: '✗', warn: '⚠' };
+  body.className = `bg-surface border border-subtle rounded-lg shadow-2xl px-4 py-2.5 text-[13px] flex items-center gap-2 ${colors[type] || colors.info}`;
+  body.innerHTML = `<span>${icons[type] || ''}</span><span>${escapeHtml(msg)}</span>`;
+  t.classList.remove('hidden');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(() => t.classList.add('hidden'), 3000);
+}
+
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ─────────── File handling ───────────
+let stagedFiles = []; // { file, base64, sizeKB, bank }
+
+const BANK_PATTERNS = [
+  ['DBS 中国', /dbs|星展/i],
+  ['大新',     /dah[\s_-]*sing|dsb/i],
+  ['恒生',     /hang[\s_-]*seng|hsb(?!c)/i],
+  ['渣打',     /standard[\s_-]*chartered|scb|渣打/i],
+  ['HSBC',     /hsbc|汇丰/i],
+  ['BOC',      /bank[\s_-]*of[\s_-]*china|bochk|中行|中银/i],
+  ['Airwallex',/airwallex/i],
+  ['ZA Bank',  /\bza[\s_-]*bank/i],
+  ['Stripe',   /stripe/i],
+  ['PayPal',   /paypal/i],
+];
+
+function detectBank(name) {
+  for (const [b, re] of BANK_PATTERNS) if (re.test(name)) return b;
+  return '未识别';
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleFiles(files) {
+  for (const f of files) {
+    if (f.type !== 'application/pdf' && !f.type.startsWith('image/')) {
+      toast(`跳过非 PDF/图片: ${f.name}`, 'warn');
+      continue;
+    }
+    if (f.size > 32 * 1024 * 1024) {
+      toast(`跳过 ${f.name}(${(f.size/1024/1024).toFixed(1)} MB > 32 MB)`, 'warn');
+      continue;
+    }
+    const base64 = await fileToBase64(f);
+    stagedFiles.push({
+      file: f,
+      base64,
+      sizeKB: Math.round(f.size / 1024),
+      bank: detectBank(f.name),
+      type: f.type,
+    });
+  }
+  renderStagedFiles();
+}
+
+function clearFiles() {
+  stagedFiles = [];
+  renderStagedFiles();
+}
+
+function removeFile(idx) {
+  stagedFiles.splice(idx, 1);
+  renderStagedFiles();
+}
+
+function renderStagedFiles() {
+  const staging = document.getElementById('fileStaging');
+  const pills = document.getElementById('filePills');
+  if (stagedFiles.length === 0) {
+    staging.classList.add('hidden');
+    return;
+  }
+  staging.classList.remove('hidden');
+  document.getElementById('fileCount').textContent = stagedFiles.length;
+  const totalKB = stagedFiles.reduce((s, f) => s + f.sizeKB, 0);
+  document.getElementById('fileSize').textContent = totalKB > 1024 ? `${(totalKB/1024).toFixed(1)} MB` : `${totalKB} KB`;
+
+  pills.innerHTML = stagedFiles.map((f, i) => `
+    <div class="flex items-center gap-2 px-2.5 py-1.5 bg-surface border border-subtle rounded-lg text-[11.5px]">
+      <span class="text-accent2">📄</span>
+      <span class="text-fg1 max-w-[200px] truncate font-mono text-[11px]">${escapeHtml(f.file.name)}</span>
+      <span class="chip bg-elevated text-fg2 border border-subtle">${f.bank}</span>
+      <span class="text-fg3 tabular">${f.sizeKB} KB</span>
+      <button onclick="removeFile(${i})" class="text-fg3 hover:text-err text-[14px]">✕</button>
+    </div>
+  `).join('');
+}
+
+// File input + drag drop
+document.getElementById('fileInput').addEventListener('change', async (e) => {
+  if (e.target.files.length > 0) await handleFiles(e.target.files);
+  e.target.value = '';
+});
+
+const dz = document.getElementById('dropzone');
+['dragenter', 'dragover'].forEach(evt => {
+  dz.addEventListener(evt, (e) => { e.preventDefault(); dz.classList.add('dropzone-active'); });
+});
+['dragleave', 'drop'].forEach(evt => {
+  dz.addEventListener(evt, (e) => { e.preventDefault(); dz.classList.remove('dropzone-active'); });
+});
+dz.addEventListener('drop', async (e) => {
+  if (e.dataTransfer.files.length > 0) await handleFiles(e.dataTransfer.files);
+});
+dz.addEventListener('click', () => document.getElementById('fileInput').click());
+
+// Whole window drag-drop (so user doesn't have to hit dropzone exactly)
+['dragover'].forEach(evt => window.addEventListener(evt, (e) => { e.preventDefault(); }));
+window.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  if (e.dataTransfer.files.length > 0) await handleFiles(e.dataTransfer.files);
+});
+
+// ─────────── Chat rendering ───────────
+let chatMessages = []; // for conversation history (follow-ups)
+let __cardSeq = 0;
+
+function appendCard(html) {
+  __cardSeq++;
+  const el = document.createElement('div');
+  el.className = 'card-in';
+  el.style.animationDelay = `${(__cardSeq - 1) * 60}ms`;
+  el.innerHTML = html;
+  document.getElementById('chatStream').appendChild(el);
+  document.getElementById('streamContainer').scrollTop = 1e9;
+  return el;
+}
+
+function appendUserBubble(text) {
+  return appendCard(`
+    <div class="flex justify-end">
+      <div class="max-w-[80%] bg-elevated border border-subtle rounded-2xl rounded-tr-md px-4 py-2.5 text-[14px] text-fg1 whitespace-pre-wrap">${escapeHtml(text)}</div>
+    </div>`);
+}
+
+function appendAssistantStarter() {
+  const id = `m${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+  appendCard(`
+    <div class="flex gap-3" id="wrap_${id}">
+      <div class="w-7 h-7 rounded-lg accent-bg flex-shrink-0 flex items-center justify-center text-[12px] ai-pulse">🔮</div>
+      <div class="flex-1 pt-0.5 min-w-0">
+        <div id="${id}" class="md text-[14px] text-fg1 leading-relaxed caret"></div>
+      </div>
+    </div>
+  `);
+  return id;
+}
+
+function finalizeAssistant(id, fullText) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  target.classList.remove('caret');
+  target.innerHTML = renderMarkdown(fullText);
+  // Add copy/export buttons
+  const wrap = document.getElementById(`wrap_${id}`);
+  if (!wrap) return;
+  const tools = document.createElement('div');
+  tools.className = 'flex gap-2 mt-3';
+  tools.innerHTML = `
+    <button onclick="copyText(${JSON.stringify(fullText).replace(/"/g, '&quot;')})" class="text-[11px] text-fg3 hover:text-fg1 px-2 py-1 rounded bg-elevated border border-subtle">📋 复制全文</button>
+    <button onclick="downloadMd(${JSON.stringify(fullText).replace(/"/g, '&quot;')})" class="text-[11px] text-fg3 hover:text-fg1 px-2 py-1 rounded bg-elevated border border-subtle">📥 下载 .md</button>
+    <button onclick="copyTsvBlocks()" class="text-[11px] text-fg3 hover:text-fg1 px-2 py-1 rounded bg-elevated border border-subtle">📊 复制所有 TSV</button>
+  `;
+  wrap.querySelector(`#${id}`).parentNode.appendChild(tools);
+
+  // Stash latest text for export
+  window.__latestReport = fullText;
+  document.getElementById('exportBtn').disabled = false;
+}
+
+function thinkingDots() {
+  return appendCard(`
+    <div class="flex gap-3" id="thinkingMsg">
+      <div class="w-7 h-7 rounded-lg accent-bg flex-shrink-0 flex items-center justify-center text-[12px] ai-pulse">🔮</div>
+      <div class="flex items-center gap-1 pt-2">
+        <span class="dot w-1.5 h-1.5 rounded-full bg-fg2 inline-block"></span>
+        <span class="dot w-1.5 h-1.5 rounded-full bg-fg2 inline-block"></span>
+        <span class="dot w-1.5 h-1.5 rounded-full bg-fg2 inline-block"></span>
+      </div>
+    </div>`);
+}
+
+// ─────────── Markdown rendering (lightweight) ───────────
+function renderMarkdown(md) {
+  // Hash code blocks first to protect them
+  const codeBlocks = [];
+  md = md.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code) => {
+    codeBlocks.push({ lang, code });
+    return ` CODEBLOCK${codeBlocks.length - 1} `;
+  });
+  const inlineCodes = [];
+  md = md.replace(/`([^`\n]+)`/g, (m, code) => {
+    inlineCodes.push(code);
+    return ` INLINECODE${inlineCodes.length - 1} `;
+  });
+
+  // Headings
+  md = md.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
+  md = md.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
+  md = md.replace(/^# (.*?)$/gm, '<h1>$1</h1>');
+
+  // Bold / italic
+  md = md.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  md = md.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+
+  // Tables (lines with |...|)
+  md = md.replace(/((?:^\|[^\n]*\|\n?)+)/gm, (m) => {
+    const lines = m.trim().split('\n').filter(l => l.trim());
+    if (lines.length < 2) return m;
+    const sep = lines[1];
+    if (!/^\|[\s\-:|]+\|$/.test(sep)) return m;
+    const headers = lines[0].split('|').slice(1, -1).map(s => s.trim());
+    const rows = lines.slice(2).map(l => l.split('|').slice(1, -1).map(s => s.trim()));
+    let t = '<table><thead><tr>';
+    headers.forEach(h => t += `<th>${h}</th>`);
+    t += '</tr></thead><tbody>';
+    rows.forEach(r => {
+      t += '<tr>';
+      r.forEach(c => t += `<td>${c}</td>`);
+      t += '</tr>';
+    });
+    return t + '</tbody></table>';
+  });
+
+  // Lists
+  md = md.replace(/((?:^[ \t]*[-*][ \t]+.*\n?)+)/gm, (m) => {
+    const items = m.split('\n').filter(l => l.trim()).map(l => l.replace(/^[ \t]*[-*][ \t]+/, ''));
+    return '<ul>' + items.map(i => `<li>${i}</li>`).join('') + '</ul>';
+  });
+  md = md.replace(/((?:^[ \t]*\d+\.[ \t]+.*\n?)+)/gm, (m) => {
+    const items = m.split('\n').filter(l => l.trim()).map(l => l.replace(/^[ \t]*\d+\.[ \t]+/, ''));
+    return '<ol>' + items.map(i => `<li>${i}</li>`).join('') + '</ol>';
+  });
+
+  // Blockquotes
+  md = md.replace(/^> (.*?)$/gm, '<blockquote>$1</blockquote>');
+
+  // Paragraphs (split by double newline)
+  md = md.split(/\n\n+/).map(p => {
+    p = p.trim();
+    if (!p) return '';
+    if (/^<(h\d|table|ul|ol|blockquote|pre)/.test(p)) return p;
+    return `<p>${p.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n');
+
+  // Restore inline codes & code blocks
+  md = md.replace(/ INLINECODE(\d+) /g, (m, i) => `<code>${escapeHtml(inlineCodes[+i])}</code>`);
+  md = md.replace(/ CODEBLOCK(\d+) /g, (m, i) => {
+    const { lang, code } = codeBlocks[+i];
+    return `<pre><code class="lang-${lang}">${escapeHtml(code)}</code></pre>`;
+  });
+  return md;
+}
+
+// ─────────── Claude API streaming ───────────
+async function streamClaude({ systemPrompt, messages, onText, onUsage, onError }) {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    onError('请先设置 API Key(右上角 ⚙️)');
+    return;
+  }
+  const model = getModel();
+  const thinking = getThinking();
+  const maxTokens = getMaxTokens();
+
+  const body = {
+    model,
+    max_tokens: maxTokens,
+    system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+    messages,
+    stream: true,
+  };
+  if (thinking > 0) {
+    body.thinking = { type: 'enabled', budget_tokens: thinking };
+  }
+
+  let response;
+  try {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    onError(`网络错误: ${e.message}`);
+    return;
+  }
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    onError(err.error?.message || `HTTP ${response.status}: ${response.statusText}`);
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let usage = {};
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let sep;
+    while ((sep = buffer.indexOf('\n\n')) !== -1) {
+      const event = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      const lines = event.split('\n');
+      let evType = '', evData = '';
+      for (const line of lines) {
+        if (line.startsWith('event:')) evType = line.slice(6).trim();
+        else if (line.startsWith('data:')) evData = line.slice(5).trim();
+      }
+      if (!evData || evData === '[DONE]') continue;
+      try {
+        const obj = JSON.parse(evData);
+        if (evType === 'content_block_delta' && obj.delta?.type === 'text_delta') {
+          onText(obj.delta.text);
+        }
+        if (evType === 'message_start' && obj.message?.usage) {
+          usage = { ...usage, ...obj.message.usage };
+        }
+        if (evType === 'message_delta' && obj.usage) {
+          usage = { ...usage, ...obj.usage };
+        }
+      } catch (e) { /* ignore parse errors */ }
+    }
+  }
+  onUsage(usage);
+}
+
+// ─────────── Main flow ───────────
+async function startAnalysis() {
+  if (stagedFiles.length === 0) {
+    toast('请先添加 PDF 文件', 'warn');
+    return;
+  }
+  if (!getApiKey()) {
+    toast('请先在设置中配置 API Key', 'warn');
+    openSettings();
+    return;
+  }
+
+  const company = document.getElementById('companyInput').value.trim() || 'Unnamed Company';
+  const periodStart = document.getElementById('periodStart').value;
+  const periodEnd = document.getElementById('periodEnd').value;
+  const fileList = stagedFiles.map(f => `  - ${f.file.name}`).join('\n');
+
+  const userText = `请严格按照系统提示词,分析以下香港银行月结单,
+计算 ${company} 在 ${periodStart} 至 ${periodEnd} 的有效净进账金额。
+
+【强制要求】
+1. 严格排除:利息、定存、内部兑换、银行费用、董事/股东往来、所有出账、
+   关联方付款(无真实贸易合同支持的)
+2. 严格计入:汇入汇款、支票存入、FPS、CHATS、e-Cheque、AR 回款、
+   POS 商户结算、支付平台清算
+3. 汇率:优先 HKMA 中间价,精度 4 位小数,附 Annex I 汇率表
+4. 输出:6 大模块 + 4 张 Excel Sheet 的复制即用代码块(全部 \`\`\`tsv 包裹)
+5. 标注与 BIR51 / 管理层声明书 / FS Cash 余额的对接点
+
+【文件清单(共 ${stagedFiles.length} 份)】
+${fileList}
+
+【输出要求】
+- 6 大模块以 Markdown 输出
+- 4 张 Excel Sheet 数据用 \`\`\`tsv 代码块附后(以制表符分隔,首行为列名)
+- 末尾给出 BIR51 / Management Rep Letter / 审计调整分录建议
+- 全部金额自验,误差 0.00`;
+
+  // Build user content with PDFs
+  const userContent = [{ type: 'text', text: userText }];
+  for (let i = 0; i < stagedFiles.length; i++) {
+    const f = stagedFiles[i];
+    const block = {
+      type: f.type === 'application/pdf' ? 'document' : 'image',
+      source: {
+        type: 'base64',
+        media_type: f.type,
+        data: f.base64,
+      },
+    };
+    if (f.type === 'application/pdf') {
+      block.title = f.file.name;
+    }
+    // Cache the LAST document block to maximize cache reuse on follow-ups
+    if (i === stagedFiles.length - 1) {
+      block.cache_control = { type: 'ephemeral' };
+    }
+    userContent.push(block);
+  }
+
+  // Switch UI to chat mode
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('chatStream').classList.remove('hidden');
+  document.getElementById('chatStream').innerHTML = '';
+  document.getElementById('fileStaging').classList.add('hidden');
+  document.getElementById('composer').classList.remove('hidden');
+  __cardSeq = 0;
+
+  // User bubble (display-only, simplified)
+  appendUserBubble(`分析 ${company} · ${periodStart} ~ ${periodEnd} · ${stagedFiles.length} 份月结单`);
+
+  // Assistant stream
+  const dotsCard = thinkingDots();
+  let firstChunk = true;
+  let assistantId;
+  let fullText = '';
+
+  document.getElementById('detailHeader').textContent = '分析中…';
+
+  await streamClaude({
+    systemPrompt: getSystemPrompt(),
+    messages: [{ role: 'user', content: userContent }],
+    onText: (chunk) => {
+      if (firstChunk) {
+        dotsCard.remove();
+        assistantId = appendAssistantStarter();
+        firstChunk = false;
+      }
+      fullText += chunk;
+      const target = document.getElementById(assistantId);
+      if (target) {
+        // Render incrementally — for performance, render Markdown only every 20 chunks
+        target.textContent = fullText;
+      }
+      document.getElementById('streamContainer').scrollTop = 1e9;
+    },
+    onUsage: (usage) => {
+      if (firstChunk) {
+        // No text came back?
+        dotsCard.remove();
+        appendCard(`<div class="text-fg2 text-[13px]">⚠ 未收到任何输出。可能模型超载或 max_tokens 太小。</div>`);
+        return;
+      }
+      finalizeAssistant(assistantId, fullText);
+      updateCostChip(usage);
+      document.getElementById('detailHeader').textContent = '分析完成';
+      saveProject({ company, periodStart, periodEnd, fullText, usage, files: stagedFiles.map(f => f.file.name) });
+      // Save messages for follow-ups
+      chatMessages = [
+        { role: 'user', content: userContent },
+        { role: 'assistant', content: [{ type: 'text', text: fullText }] }
+      ];
+      toast('分析完成', 'ok');
+    },
+    onError: (err) => {
+      dotsCard.remove();
+      appendCard(`<div class="bg-err/10 border border-err/30 text-err rounded-lg p-4 text-[13px]">❌ ${escapeHtml(err)}</div>`);
+      toast(err, 'err');
+      document.getElementById('detailHeader').textContent = '失败';
+    },
+  });
+}
+
+async function sendFollowup() {
+  const input = document.getElementById('composerInput');
+  const text = input.value.trim();
+  if (!text) return;
+  if (!chatMessages.length) {
+    toast('请先开始一次分析', 'warn');
+    return;
+  }
+  input.value = '';
+  input.style.height = 'auto';
+  appendUserBubble(text);
+  chatMessages.push({ role: 'user', content: text });
+
+  const dotsCard = thinkingDots();
+  let firstChunk = true;
+  let assistantId;
+  let fullText = '';
+
+  await streamClaude({
+    systemPrompt: getSystemPrompt(),
+    messages: chatMessages,
+    onText: (chunk) => {
+      if (firstChunk) {
+        dotsCard.remove();
+        assistantId = appendAssistantStarter();
+        firstChunk = false;
+      }
+      fullText += chunk;
+      const target = document.getElementById(assistantId);
+      if (target) target.textContent = fullText;
+      document.getElementById('streamContainer').scrollTop = 1e9;
+    },
+    onUsage: (usage) => {
+      if (firstChunk) { dotsCard.remove(); return; }
+      finalizeAssistant(assistantId, fullText);
+      updateCostChip(usage, true);
+      chatMessages.push({ role: 'assistant', content: [{ type: 'text', text: fullText }] });
+    },
+    onError: (err) => {
+      dotsCard.remove();
+      appendCard(`<div class="bg-err/10 border border-err/30 text-err rounded-lg p-4 text-[13px]">❌ ${escapeHtml(err)}</div>`);
+    },
+  });
+}
+
+// ─────────── Cost chip ───────────
+let __sessionCost = 0;
+function updateCostChip(usage, accumulate = false) {
+  const m = getModel();
+  const p = PRICING[m] || { in: 3, out: 15 };
+  const inTokens = (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+  const cachedTokens = usage.cache_read_input_tokens || 0;
+  const outTokens = usage.output_tokens || 0;
+  const cost = (inTokens / 1e6) * p.in + (cachedTokens / 1e6) * p.in * 0.1 + (outTokens / 1e6) * p.out;
+  if (accumulate) __sessionCost += cost;
+  else __sessionCost = cost;
+  const totalIn = inTokens + cachedTokens;
+  document.getElementById('costChip').innerHTML = `
+    <span class="w-1.5 h-1.5 rounded-full bg-${cost > 5 ? 'warn' : 'ok'}"></span>
+    <span class="tabular">$${__sessionCost.toFixed(2)}</span>
+    <span class="text-fg3">·</span>
+    <span class="tabular">${(totalIn/1000).toFixed(1)}K + ${(outTokens/1000).toFixed(1)}K</span>
+  `;
+}
+
+// ─────────── Export ───────────
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => toast('已复制', 'ok'));
+}
+function downloadMd(text) {
+  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(document.getElementById('companyInput')?.value || 'report').replace(/\s+/g, '_')}_${Date.now()}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('已下载', 'ok');
+}
+function copyTsvBlocks() {
+  const text = window.__latestReport || '';
+  const matches = [...text.matchAll(/```tsv\s*\n([\s\S]*?)```/g)];
+  if (!matches.length) {
+    toast('未找到 TSV 代码块', 'warn');
+    return;
+  }
+  const combined = matches.map((m, i) => `# Sheet ${i+1}\n${m[1].trim()}`).join('\n\n');
+  navigator.clipboard.writeText(combined).then(() => toast(`已复制 ${matches.length} 个 TSV`, 'ok'));
+}
+function exportReport() {
+  if (!window.__latestReport) { toast('暂无报告', 'warn'); return; }
+  downloadMd(window.__latestReport);
+}
+
+// ─────────── Project persistence ───────────
+function loadProjects() {
+  try { return JSON.parse(localStorage.getItem(PROJECTS_KEY)) || []; }
+  catch { return []; }
+}
+function saveProject(p) {
+  const list = loadProjects();
+  list.unshift({ ...p, id: Date.now(), files: p.files || [] });
+  localStorage.setItem(PROJECTS_KEY, JSON.stringify(list.slice(0, 30)));
+  renderProjectList();
+}
+function renderProjectList() {
+  const list = loadProjects();
+  const el = document.getElementById('projectList');
+  if (list.length === 0) {
+    el.innerHTML = '<div class="text-[11.5px] text-fg3 px-2 py-2">暂无历史</div>';
+    return;
+  }
+  el.innerHTML = list.map(p => `
+    <button onclick="loadProject(${p.id})" class="w-full flex items-center gap-2 px-2.5 py-2 rounded-md hover:bg-elevated text-fg2 hover:text-fg1 text-[12.5px] text-left transition truncate">
+      <span class="w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0"></span>
+      <div class="flex-1 min-w-0">
+        <div class="truncate">${escapeHtml(p.company)}</div>
+        <div class="text-[10.5px] text-fg3">${p.periodStart} ~ ${p.periodEnd}</div>
+      </div>
+      <span class="text-fg3 text-[10.5px] tabular">${p.files.length}</span>
+    </button>
+  `).join('');
+}
+function loadProject(id) {
+  const p = loadProjects().find(p => p.id === id);
+  if (!p) return;
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('chatStream').classList.remove('hidden');
+  document.getElementById('chatStream').innerHTML = '';
+  document.getElementById('composer').classList.remove('hidden');
+  __cardSeq = 0;
+  appendUserBubble(`分析 ${p.company} · ${p.periodStart} ~ ${p.periodEnd} · ${p.files.length} 份月结单(历史)`);
+  const id2 = appendAssistantStarter();
+  finalizeAssistant(id2, p.fullText);
+  if (p.usage) updateCostChip(p.usage);
+  document.getElementById('detailHeader').textContent = '历史项目';
+  document.getElementById('companyInput').value = p.company;
+  document.getElementById('periodStart').value = p.periodStart;
+  document.getElementById('periodEnd').value = p.periodEnd;
+  window.__latestReport = p.fullText;
+  document.getElementById('exportBtn').disabled = false;
+  toast('已加载历史项目', 'ok');
+}
+
+function newSession() {
+  document.getElementById('chatStream').classList.add('hidden');
+  document.getElementById('chatStream').innerHTML = '';
+  document.getElementById('emptyState').classList.remove('hidden');
+  document.getElementById('composer').classList.add('hidden');
+  document.getElementById('exportBtn').disabled = true;
+  document.getElementById('detailHeader').textContent = '准备就绪';
+  chatMessages = [];
+  stagedFiles = [];
+  renderStagedFiles();
+  __sessionCost = 0;
+  document.getElementById('costChip').innerHTML = `
+    <span class="w-1.5 h-1.5 rounded-full bg-fg3"></span>
+    <span class="tabular">$0.00</span>
+    <span class="text-fg3">·</span>
+    <span>本次会话</span>
+  `;
+}
+
+function openCompanyEditor() {
+  const newName = prompt('修改公司名称:', document.getElementById('companyInput').value);
+  if (newName) {
+    document.getElementById('companyInput').value = newName;
+    document.getElementById('companyLabel').textContent = newName;
+    document.getElementById('companyAvatar').textContent = newName[0]?.toUpperCase() || '?';
+  }
+}
+
+function showAbout() {
+  document.getElementById('aboutModal').classList.remove('hidden');
+}
+
+// ─────────── Keyboard shortcuts ───────────
+document.addEventListener('keydown', (e) => {
+  if (e.key === '/' && !['TEXTAREA','INPUT'].includes(document.activeElement.tagName)) {
+    e.preventDefault();
+    document.getElementById('composerInput')?.focus();
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+    e.preventDefault();
+    openSettings();
+  }
+});
+document.getElementById('composerInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    sendFollowup();
+  }
+});
+document.getElementById('composerInput').addEventListener('input', (e) => {
+  e.target.style.height = 'auto';
+  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+});
+
+// ─────────── Init ───────────
+window.addEventListener('DOMContentLoaded', () => {
+  updateApiKeyDot();
+  updateModelLabel();
+  renderProjectList();
+  // First-time visit → open settings
+  if (!getApiKey()) {
+    setTimeout(() => {
+      toast('首次使用,请先配置 API Key', 'info');
+      openSettings();
+    }, 400);
+  }
+});
+</script>
+</body>
+</html>
