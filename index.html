@@ -242,13 +242,40 @@ tailwind.config = {
 
   </main>
 
-  <!-- Right detail panel -->
-  <aside class="w-80 border-l border-subtle bg-base hidden xl:flex flex-col">
-    <div class="p-4 border-b border-subtle">
-      <div class="text-[11px] font-medium text-fg3 tracking-wide uppercase mb-1">本次分析</div>
-      <div class="text-[13px] text-fg2" id="detailHeader">准备就绪</div>
+  <!-- ─── Right Artifact Panel(像 Claude 的 artifact 一样)─── -->
+  <aside id="artifactPanel" class="border-l border-subtle bg-base flex flex-col transition-all duration-300"
+         style="width: 320px;">
+    <!-- Header bar -->
+    <div class="px-4 py-3 border-b border-subtle flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2 min-w-0 flex-1">
+        <span id="artifactIcon" class="text-base flex-shrink-0">📋</span>
+        <div class="min-w-0">
+          <div class="text-[11px] font-medium text-fg3 tracking-wide uppercase">侧边面板</div>
+          <div id="artifactTitle" class="text-[13px] text-fg1 truncate">本次分析信息</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-1 flex-shrink-0">
+        <button id="artifactExpandBtn" onclick="toggleArtifactWidth()" class="w-7 h-7 rounded hover:bg-elevated flex items-center justify-center text-fg3 hover:text-fg1" title="展开/收起">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M9 2l-2 2 2 2M5 12l2-2-2-2M2 7h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button onclick="closeArtifact()" class="w-7 h-7 rounded hover:bg-elevated flex items-center justify-center text-fg3 hover:text-fg1" title="收到 320px">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M9 4l-3 3 3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
     </div>
-    <div id="detailContent" class="flex-1 overflow-y-auto scrollbar p-4 space-y-4">
+
+    <!-- Tabs (only shown when there's content) -->
+    <div id="artifactTabs" class="hidden border-b border-subtle px-3 py-2 flex gap-1">
+      <button onclick="switchArtifactTab('report')" data-tab="report"
+              class="art-tab px-3 py-1 rounded-md text-[12px] font-medium bg-elevated text-fg1">📄 报告</button>
+      <button onclick="switchArtifactTab('tables')" data-tab="tables"
+              class="art-tab px-3 py-1 rounded-md text-[12px] font-medium text-fg2 hover:bg-elevated hover:text-fg1">📊 数据表</button>
+      <button onclick="switchArtifactTab('citations')" data-tab="citations"
+              class="art-tab px-3 py-1 rounded-md text-[12px] font-medium text-fg2 hover:bg-elevated hover:text-fg1">📜 引用</button>
+    </div>
+
+    <!-- Default content (info mode) -->
+    <div id="artifactInfoMode" class="flex-1 overflow-y-auto scrollbar p-4 space-y-4">
       <div>
         <div class="text-[11px] font-medium text-fg3 tracking-wide uppercase mb-2">规则速览</div>
         <div class="text-[12px] text-fg2 space-y-1.5">
@@ -278,8 +305,34 @@ tailwind.config = {
           <span class="chip bg-elevated text-accent2 border border-subtle font-mono">HKSA 230</span>
         </div>
       </div>
+      <div class="text-[11px] text-fg3 leading-relaxed pt-3 border-t border-subtle">
+        💡 提示:开始分析后,完整报告会显示在这里 — 左边继续追问,右边随时查看。
+      </div>
     </div>
-    <div class="p-3 border-t border-subtle text-[10.5px] text-fg3 text-center">
+
+    <!-- Report mode (filled when analysis runs) -->
+    <div id="artifactReportMode" class="hidden flex-1 overflow-y-auto scrollbar">
+      <div id="artifactReportTab" class="art-pane md p-5 text-[13.5px] text-fg1 leading-relaxed"></div>
+      <div id="artifactTablesTab" class="art-pane hidden p-5 space-y-5"></div>
+      <div id="artifactCitationsTab" class="art-pane hidden p-5 space-y-3"></div>
+    </div>
+
+    <!-- Footer toolbar (in report mode) -->
+    <div id="artifactToolbar" class="hidden border-t border-subtle p-2 flex items-center gap-1">
+      <button onclick="copyArtifact()" class="px-2.5 py-1.5 rounded-md hover:bg-elevated text-[11.5px] text-fg2 hover:text-fg1 flex items-center gap-1">
+        <span>📋</span><span>复制</span>
+      </button>
+      <button onclick="downloadArtifactMd()" class="px-2.5 py-1.5 rounded-md hover:bg-elevated text-[11.5px] text-fg2 hover:text-fg1 flex items-center gap-1">
+        <span>📥</span><span>下载 .md</span>
+      </button>
+      <button onclick="copyArtifactTsv()" class="px-2.5 py-1.5 rounded-md hover:bg-elevated text-[11.5px] text-fg2 hover:text-fg1 flex items-center gap-1">
+        <span>📊</span><span>复制 TSV</span>
+      </button>
+      <div class="flex-1"></div>
+      <span id="artifactStatus" class="text-[10.5px] text-fg3 mr-2"></span>
+    </div>
+
+    <div class="p-2 border-t border-subtle text-[10px] text-fg3 text-center">
       v4.0 · HKSA 230 / SME-FRS / IRO Cap.112
     </div>
   </aside>
@@ -1257,6 +1310,154 @@ function thinkingDots() {
     </div>`);
 }
 
+// ─────────── Right Artifact Panel ───────────
+let __artifactExpanded = false;
+let __artifactTab = 'report';
+
+function openArtifactReport(title) {
+  document.getElementById('artifactInfoMode').classList.add('hidden');
+  document.getElementById('artifactReportMode').classList.remove('hidden');
+  document.getElementById('artifactTabs').classList.remove('hidden');
+  document.getElementById('artifactToolbar').classList.remove('hidden');
+  document.getElementById('artifactIcon').textContent = '📄';
+  document.getElementById('artifactTitle').textContent = title || '审计报告';
+}
+
+function closeArtifact() {
+  // collapse to compact 320px width but keep current content
+  const panel = document.getElementById('artifactPanel');
+  panel.style.width = '320px';
+  __artifactExpanded = false;
+}
+
+function expandArtifactWide() {
+  const panel = document.getElementById('artifactPanel');
+  // 50% of viewport, min 480px, max 900px
+  const w = Math.min(900, Math.max(480, Math.floor(window.innerWidth * 0.45)));
+  panel.style.width = w + 'px';
+  __artifactExpanded = true;
+}
+
+function toggleArtifactWidth() {
+  if (__artifactExpanded) closeArtifact();
+  else expandArtifactWide();
+}
+
+function switchArtifactTab(tab) {
+  __artifactTab = tab;
+  document.querySelectorAll('.art-tab').forEach(b => {
+    if (b.dataset.tab === tab) b.className = 'art-tab px-3 py-1 rounded-md text-[12px] font-medium bg-elevated text-fg1';
+    else b.className = 'art-tab px-3 py-1 rounded-md text-[12px] font-medium text-fg2 hover:bg-elevated hover:text-fg1';
+  });
+  document.querySelectorAll('.art-pane').forEach(p => p.classList.add('hidden'));
+  document.getElementById(`artifact${tab.charAt(0).toUpperCase() + tab.slice(1)}Tab`).classList.remove('hidden');
+}
+
+function renderArtifactReport(text) {
+  const reportEl = document.getElementById('artifactReportTab');
+  reportEl.innerHTML = renderMarkdown(text);
+
+  // Tables tab: extract ```tsv blocks
+  const tsvMatches = [...text.matchAll(/```tsv\s*\n([\s\S]*?)```/g)];
+  const tablesEl = document.getElementById('artifactTablesTab');
+  if (tsvMatches.length === 0) {
+    tablesEl.innerHTML = '<div class="text-[12px] text-fg3">报告中未找到 ```tsv 数据表代码块。</div>';
+  } else {
+    tablesEl.innerHTML = tsvMatches.map((m, i) => {
+      const tsv = m[1].trim();
+      const lines = tsv.split('\n').filter(l => l.trim());
+      if (lines.length === 0) return '';
+      const headers = lines[0].split('\t');
+      const rows = lines.slice(1).map(l => l.split('\t'));
+      const SHEETS = ['汇总表', '有效进账明细', '已排除明细', '审计轨迹'];
+      const name = SHEETS[i] || `Sheet ${i+1}`;
+      return `
+        <div class="bg-surface border border-subtle rounded-card overflow-hidden">
+          <div class="flex items-center justify-between px-3 py-2 border-b border-subtle bg-elevated">
+            <div class="text-[12.5px] font-medium text-fg1">Sheet ${i+1} · ${name}</div>
+            <div class="flex gap-1">
+              <button onclick="copyText(${JSON.stringify(tsv).replace(/"/g, '&quot;')})" class="text-[11px] text-fg3 hover:text-fg1 px-2 py-0.5 rounded hover:bg-base">📋 复制 TSV</button>
+              <button onclick="downloadTsv(${i}, ${JSON.stringify(tsv).replace(/"/g, '&quot;')})" class="text-[11px] text-fg3 hover:text-fg1 px-2 py-0.5 rounded hover:bg-base">📥 下载</button>
+            </div>
+          </div>
+          <div class="overflow-x-auto max-h-72 scrollbar">
+            <table class="w-full text-[12px] tabular">
+              <thead class="bg-base sticky top-0">
+                <tr>${headers.map(h => `<th class="text-left px-2 py-1.5 text-fg3 font-medium border-b border-subtle">${escapeHtml(h)}</th>`).join('')}</tr>
+              </thead>
+              <tbody>
+                ${rows.slice(0, 100).map(r => `<tr class="border-b border-subtle hover:bg-elevated">${r.map(c => `<td class="px-2 py-1 text-fg1">${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${rows.length > 100 ? `<div class="px-3 py-2 text-[11px] text-fg3 border-t border-subtle">仅显示前 100 行,共 ${rows.length} 行 · 复制 TSV 可拿到全部</div>` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  // Citations tab: extract IRO/DIPN/SME-FRS/HKSA references
+  const citEl = document.getElementById('artifactCitationsTab');
+  const citRegex = /\b(IRO\s+s\.\s*\d+(?:\(\d+\))?(?:\([a-z]\))?|DIPN\s+\d+|SME-?FRS\s+(?:Sec\.|Section)\s*\d+|HKFRS\s+\d+|HKSA\s+\d+)/gi;
+  const cits = [...new Set([...text.matchAll(citRegex)].map(m => m[1]))];
+  if (cits.length === 0) {
+    citEl.innerHTML = '<div class="text-[12px] text-fg3">报告中未识别到引用条款。</div>';
+  } else {
+    citEl.innerHTML = `
+      <div class="text-[11px] font-medium text-fg3 tracking-wide uppercase mb-2">报告中引用的条款(${cits.length} 个)</div>
+      <div class="flex flex-wrap gap-1.5">
+        ${cits.map(c => `<span class="chip bg-elevated text-accent2 border border-subtle font-mono text-[11.5px]">${c}</span>`).join('')}
+      </div>
+      <div class="mt-4 text-[11.5px] text-fg2 space-y-2">
+        <div><span class="font-mono text-accent2">IRO s.14</span> — Charge of profits tax</div>
+        <div><span class="font-mono text-accent2">IRO s.15(1)(f)</span> — Interest income deemed sourced HK</div>
+        <div><span class="font-mono text-accent2">IRO s.16(1)</span> — Allowable deductions</div>
+        <div><span class="font-mono text-accent2">IRO s.61A</span> — Anti-avoidance / connected party</div>
+        <div><span class="font-mono text-accent2">DIPN 21</span> — Locality of profits</div>
+        <div><span class="font-mono text-accent2">DIPN 46</span> — Transfer pricing guidelines</div>
+        <div><span class="font-mono text-accent2">SME-FRS Sec.4</span> — Revenue recognition</div>
+        <div><span class="font-mono text-accent2">HKSA 230</span> — Audit documentation</div>
+      </div>
+    `;
+  }
+
+  document.getElementById('artifactStatus').textContent = `${text.length.toLocaleString()} 字符`;
+  switchArtifactTab(__artifactTab);
+}
+
+function copyArtifact() {
+  navigator.clipboard.writeText(window.__latestReport || '').then(() => toast('已复制全文', 'ok'));
+}
+function downloadArtifactMd() {
+  const t = window.__latestReport || '';
+  if (!t) { toast('暂无报告', 'warn'); return; }
+  const blob = new Blob([t], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `audit-report-${Date.now()}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('已下载', 'ok');
+}
+function copyArtifactTsv() {
+  const text = window.__latestReport || '';
+  const matches = [...text.matchAll(/```tsv\s*\n([\s\S]*?)```/g)];
+  if (!matches.length) { toast('未找到 TSV 代码块', 'warn'); return; }
+  const SHEETS = ['汇总表', '有效进账明细', '已排除明细', '审计轨迹'];
+  const combined = matches.map((m, i) => `# Sheet ${i+1} · ${SHEETS[i] || ''}\n${m[1].trim()}`).join('\n\n');
+  navigator.clipboard.writeText(combined).then(() => toast(`已复制 ${matches.length} 个 TSV`, 'ok'));
+}
+function downloadTsv(idx, content) {
+  const SHEETS = ['汇总表', '有效进账明细', '已排除明细', '审计轨迹'];
+  const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Sheet${idx+1}_${SHEETS[idx] || 'data'}.tsv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ─────────── Markdown rendering (lightweight) ───────────
 function renderMarkdown(md) {
   // Hash code blocks first to protect them
@@ -1625,13 +1826,14 @@ ${fileList}
   const provider = getProviderConfig();
   const userContent = await buildUserContent(userText, stagedFiles, provider);
 
-  // Assistant stream
+  // Assistant stream — text goes to artifact panel; chat shows compact status
   const dotsCard = thinkingDots();
   let firstChunk = true;
-  let assistantId;
   let fullText = '';
 
-  document.getElementById('detailHeader').textContent = '分析中…';
+  // Open artifact panel in report mode + auto-expand wide
+  openArtifactReport(`${company} · ${periodStart} ~ ${periodEnd}`);
+  expandArtifactWide();
 
   await streamAI({
     systemPrompt: getSystemPrompt(),
@@ -1639,27 +1841,55 @@ ${fileList}
     onText: (chunk) => {
       if (firstChunk) {
         dotsCard.remove();
-        assistantId = appendAssistantStarter();
+        // Add a compact status card in chat
+        const statusEl = document.createElement('div');
+        statusEl.id = 'streamStatus';
+        statusEl.className = 'card-in flex gap-3';
+        statusEl.innerHTML = `
+          <div class="w-7 h-7 rounded-lg accent-bg flex-shrink-0 flex items-center justify-center text-[12px] ai-pulse">🔮</div>
+          <div class="flex-1 pt-1 text-[13px] text-fg2">
+            正在生成审计报告 → <span class="text-accent2">右侧面板</span> 实时更新
+            <div class="text-[11.5px] text-fg3 mt-1"><span id="streamCharCount" class="tabular">0</span> 字符已生成</div>
+          </div>`;
+        document.getElementById('chatStream').appendChild(statusEl);
         firstChunk = false;
       }
       fullText += chunk;
-      const target = document.getElementById(assistantId);
-      if (target) {
-        // Render incrementally — for performance, render Markdown only every 20 chunks
-        target.textContent = fullText;
-      }
-      document.getElementById('streamContainer').scrollTop = 1e9;
+      // Update artifact (raw text streaming, render Markdown after done)
+      const target = document.getElementById('artifactReportTab');
+      if (target) target.textContent = fullText;
+      // Update char counter in chat
+      const cc = document.getElementById('streamCharCount');
+      if (cc) cc.textContent = fullText.length.toLocaleString();
+      // Auto-scroll artifact
+      document.getElementById('artifactReportMode').scrollTop = 1e9;
     },
     onUsage: (usage) => {
       if (firstChunk) {
-        // No text came back?
         dotsCard.remove();
-        appendCard(`<div class="text-fg2 text-[13px]">⚠ 未收到任何输出。可能模型超载或 max_tokens 太小。</div>`);
+        appendCard(`<div class="bg-warn/10 border border-warn/30 rounded-lg p-3 text-[13px] text-warn">⚠ 未收到任何输出。可能模型超载或 max_tokens 太小。</div>`);
         return;
       }
-      finalizeAssistant(assistantId, fullText);
+      // Render full Markdown in artifact + populate tables/citations tabs
+      renderArtifactReport(fullText);
+      // Replace chat status with completion summary
+      const statusEl = document.getElementById('streamStatus');
+      if (statusEl) {
+        statusEl.id = '';
+        statusEl.innerHTML = `
+          <div class="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-[12px] bg-ok text-white">✓</div>
+          <div class="flex-1 pt-0.5">
+            <div class="text-[13px] text-fg1 mb-1">报告完成 · 共 ${fullText.length.toLocaleString()} 字符</div>
+            <div class="flex gap-2 mt-2">
+              <button onclick="expandArtifactWide()" class="text-[11px] px-2.5 py-1 rounded bg-elevated border border-subtle hover:border-line text-fg1">📄 查看完整报告 →</button>
+              <button onclick="downloadArtifactMd()" class="text-[11px] px-2.5 py-1 rounded bg-elevated border border-subtle hover:border-line text-fg2 hover:text-fg1">📥 下载 .md</button>
+              <button onclick="copyArtifactTsv()" class="text-[11px] px-2.5 py-1 rounded bg-elevated border border-subtle hover:border-line text-fg2 hover:text-fg1">📊 复制 TSV</button>
+            </div>
+          </div>`;
+      }
       updateCostChip(usage);
-      document.getElementById('detailHeader').textContent = '分析完成';
+      window.__latestReport = fullText;
+      document.getElementById('exportBtn').disabled = false;
       saveProject({ company, periodStart, periodEnd, fullText, usage, files: stagedFiles.map(f => f.file.name) });
       // Save messages for follow-ups (provider-aware shape)
       const provider2 = getProviderConfig();
@@ -1679,9 +1909,10 @@ ${fileList}
     },
     onError: (err) => {
       dotsCard.remove();
-      appendCard(`<div class="bg-err/10 border border-err/30 text-err rounded-lg p-4 text-[13px]">❌ ${escapeHtml(err)}</div>`);
-      toast(err, 'err');
-      document.getElementById('detailHeader').textContent = '失败';
+      const statusEl = document.getElementById('streamStatus');
+      if (statusEl) statusEl.remove();
+      appendCard(`<div class="bg-err/10 border border-err/30 text-err rounded-lg p-4 text-[13px] whitespace-pre-wrap">❌ ${escapeHtml(err)}</div>`);
+      toast(err.split('\n')[0], 'err');
     },
   });
 }
@@ -1823,13 +2054,21 @@ function loadProject(id) {
   document.getElementById('emptyState').classList.add('hidden');
   document.getElementById('chatStream').classList.remove('hidden');
   document.getElementById('chatStream').innerHTML = '';
+  document.getElementById('emptyState').classList.add('hidden');
   document.getElementById('composer').classList.remove('hidden');
   __cardSeq = 0;
-  appendUserBubble(`分析 ${p.company} · ${p.periodStart} ~ ${p.periodEnd} · ${p.files.length} 份月结单(历史)`);
-  const id2 = appendAssistantStarter();
-  finalizeAssistant(id2, p.fullText);
+  appendUserBubble(`${p.company} · ${p.periodStart} ~ ${p.periodEnd} · ${p.files.length} 份月结单(历史)`);
+  appendCard(`
+    <div class="flex gap-3">
+      <div class="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-[12px] bg-ok text-white">✓</div>
+      <div class="flex-1 pt-0.5 text-[13px] text-fg2">已从本机历史加载 · <button onclick="expandArtifactWide()" class="text-accent2 hover:text-accent">右侧查看完整报告 →</button></div>
+    </div>
+  `);
+  // Render into artifact panel
+  openArtifactReport(`${p.company} · ${p.periodStart} ~ ${p.periodEnd}(历史)`);
+  expandArtifactWide();
+  renderArtifactReport(p.fullText);
   if (p.usage) updateCostChip(p.usage);
-  document.getElementById('detailHeader').textContent = '历史项目';
   document.getElementById('companyInput').value = p.company;
   document.getElementById('periodStart').value = p.periodStart;
   document.getElementById('periodEnd').value = p.periodEnd;
@@ -1844,7 +2083,14 @@ function newSession() {
   document.getElementById('emptyState').classList.remove('hidden');
   document.getElementById('composer').classList.add('hidden');
   document.getElementById('exportBtn').disabled = true;
-  document.getElementById('detailHeader').textContent = '准备就绪';
+  // Reset artifact panel to info mode
+  document.getElementById('artifactReportMode').classList.add('hidden');
+  document.getElementById('artifactInfoMode').classList.remove('hidden');
+  document.getElementById('artifactTabs').classList.add('hidden');
+  document.getElementById('artifactToolbar').classList.add('hidden');
+  document.getElementById('artifactIcon').textContent = '📋';
+  document.getElementById('artifactTitle').textContent = '本次分析信息';
+  closeArtifact();
   chatMessages = [];
   stagedFiles = [];
   renderStagedFiles();
