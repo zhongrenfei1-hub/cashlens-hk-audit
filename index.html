@@ -4,8 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Cashlens · 现金透镜 · 香港审计流水分析</title>
-<meta name="description" content="香港 SME 银行月结单 AI 审计分析工具 · HKSA 230 / SME-FRS / IRO 合规" />
+<meta name="description" content="香港 SME 银行月结单 AI 审计分析工具 · 支持 Anthropic / OpenAI / DeepSeek / 通义千问 / 豆包 / Kimi / 智谱 等多家 API · HKSA 230 / SME-FRS / IRO 合规" />
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+</script>
 <script>
 tailwind.config = {
   darkMode: 'class',
@@ -290,29 +296,49 @@ tailwind.config = {
     <div class="p-5 space-y-5">
 
       <div>
-        <label class="block text-[12px] font-medium text-fg2 mb-1.5">Anthropic API Key</label>
+        <label class="block text-[12px] font-medium text-fg2 mb-1.5">服务商</label>
+        <select id="providerSelect" class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] focus-glow">
+          <option value="deepseek">DeepSeek 深度求索(便宜,国内可用,推荐)</option>
+          <option value="qwen">阿里 通义千问 (DashScope · 国内)</option>
+          <option value="doubao">字节跳动 豆包 (火山方舟 · 国内)</option>
+          <option value="moonshot">月之暗面 Kimi (Moonshot · 国内)</option>
+          <option value="zhipu">智谱 GLM (BigModel · 国内)</option>
+          <option value="openrouter">OpenRouter(代理多家模型)</option>
+          <option value="anthropic">Anthropic Claude(海外)</option>
+          <option value="openai">OpenAI(海外)</option>
+          <option value="custom">自定义 OpenAI 兼容…</option>
+        </select>
+      </div>
+
+      <div id="customEndpointWrap" class="hidden">
+        <label class="block text-[12px] font-medium text-fg2 mb-1.5">自定义 Base URL</label>
+        <input id="customBaseUrl" type="text" placeholder="https://your-endpoint/v1"
+               class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] font-mono focus-glow" />
+        <div class="mt-1 text-[11px] text-fg3">必须是 OpenAI 兼容 API(支持 /chat/completions)</div>
+      </div>
+
+      <div>
+        <label class="block text-[12px] font-medium text-fg2 mb-1.5">
+          API Key <span id="apiKeyHint" class="text-fg3 font-normal">(从服务商控制台获取)</span>
+        </label>
         <div class="flex items-center gap-2">
-          <input id="apiKeyInput" type="password" placeholder="sk-ant-api03-…" autocomplete="off"
+          <input id="apiKeyInput" type="password" placeholder="sk-..." autocomplete="off"
                  class="flex-1 bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] font-mono focus-glow" />
           <button onclick="toggleKeyVisibility()" id="toggleKeyBtn" class="px-2.5 py-2 rounded-lg bg-elevated border border-subtle hover:border-line text-[11.5px] text-fg2">显示</button>
         </div>
         <div class="mt-2 text-[11px] text-fg3 leading-relaxed">
-          密钥只保存在你浏览器的 localStorage,从不发往任何第三方服务器(只发到 api.anthropic.com)。
-          <a href="https://console.anthropic.com/settings/keys" target="_blank" class="text-accent2 hover:text-accent">获取 Key →</a>
+          密钥只存浏览器 localStorage,直接发 <span id="endpointLabel" class="font-mono">api.deepseek.com</span>,无中转。
+          <a id="getKeyLink" href="https://platform.deepseek.com/api_keys" target="_blank" class="text-accent2 hover:text-accent">获取 Key →</a>
         </div>
         <div id="keyTestResult" class="mt-2 text-[11.5px] hidden"></div>
       </div>
 
       <div>
         <label class="block text-[12px] font-medium text-fg2 mb-1.5">模型</label>
-        <select id="modelSelect" class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] focus-glow">
-          <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5(性价比 · 推荐)</option>
-          <option value="claude-opus-4-5-20250929">Claude Opus 4.5(最强)</option>
-          <option value="claude-haiku-4-5">Claude Haiku 4.5(最快最便宜)</option>
-          <option value="custom">自定义…</option>
-        </select>
-        <input id="customModel" type="text" placeholder="例: claude-opus-4-7-20260301"
+        <select id="modelSelect" class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] focus-glow"></select>
+        <input id="customModel" type="text" placeholder="自定义模型 ID,例: gpt-4o"
                class="hidden mt-2 w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] font-mono focus-glow" />
+        <div class="mt-1.5 text-[11px] text-fg3" id="modelHint"></div>
       </div>
 
       <div>
@@ -481,16 +507,156 @@ receipts that contribute to revenue/turnover for tax purposes.
 7. 末尾追加 Audit Sign-off Block:日期、底稿编号、Prepared/Reviewed by
 8. 遵循 HKSA 230:经验丰富的审计师能在不接触执行人的情况下理解工作`;
 
-// Pricing per 1M tokens (USD) — adjust if Anthropic updates
-const PRICING = {
-  'claude-opus-4-5-20250929': { in: 15, out: 75 },
-  'claude-opus-4-7-20260301': { in: 15, out: 75 },
-  'claude-sonnet-4-5-20250929': { in: 3, out: 15 },
-  'claude-haiku-4-5': { in: 1, out: 5 },
+// ─────────── Provider config ───────────
+// Each provider: format='anthropic' | 'openai' (compatible chat completions)
+// pricing in USD per 1M tokens (rough; for display only). Use ¥ for CN-only providers.
+const PROVIDERS = {
+  deepseek: {
+    label: 'DeepSeek',
+    format: 'openai',
+    baseUrl: 'https://api.deepseek.com',
+    keyPrefix: 'sk-',
+    keyHint: 'sk-...',
+    keyLink: 'https://platform.deepseek.com/api_keys',
+    endpointLabel: 'api.deepseek.com',
+    models: [
+      { id: 'deepseek-chat', label: 'DeepSeek Chat (V3,通用)', in: 0.27, out: 1.10, currency: '¥' },
+      { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner (R1,深度推理)', in: 0.55, out: 2.19, currency: '¥' },
+    ],
+    hint: '👍 国内可直连 · 极便宜(¥0.27/M 输入)· 但不支持图片/PDF,会先把 PDF 转成纯文本',
+    pdfMode: 'text', // 'native' = pass PDF as document (Anthropic only); 'image' = pages → images; 'text' = OCR/extract via PDF.js text layer
+  },
+  qwen: {
+    label: '通义千问 (DashScope)',
+    format: 'openai',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode',
+    keyPrefix: 'sk-',
+    keyHint: 'sk-...',
+    keyLink: 'https://bailian.console.aliyun.com/?apiKey=1',
+    endpointLabel: 'dashscope.aliyuncs.com',
+    models: [
+      { id: 'qwen-vl-max', label: 'Qwen VL Max (视觉旗舰)', in: 20, out: 60, currency: '¥' },
+      { id: 'qwen-vl-plus', label: 'Qwen VL Plus (视觉性价比)', in: 1.5, out: 4.5, currency: '¥' },
+      { id: 'qwen-plus', label: 'Qwen Plus (纯文本性价比)', in: 0.8, out: 2, currency: '¥' },
+      { id: 'qwen-max', label: 'Qwen Max (纯文本旗舰)', in: 20, out: 60, currency: '¥' },
+    ],
+    hint: '🇨🇳 阿里云,新用户送百万 token · VL 模型支持图片(PDF 自动转图片)',
+    pdfMode: 'image',
+  },
+  doubao: {
+    label: '豆包 (火山方舟)',
+    format: 'openai',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    keyPrefix: '',
+    keyHint: 'API Key from 火山方舟',
+    keyLink: 'https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey',
+    endpointLabel: 'ark.cn-beijing.volces.com',
+    models: [
+      { id: 'doubao-1-5-vision-pro-32k-250115', label: '豆包 1.5 Vision Pro (32K,支持图片)', in: 3, out: 9, currency: '¥' },
+      { id: 'doubao-1-5-pro-32k-250115', label: '豆包 1.5 Pro (32K,纯文本)', in: 0.8, out: 2, currency: '¥' },
+      { id: 'doubao-1-5-pro-256k-250115', label: '豆包 1.5 Pro (256K 长文本)', in: 5, out: 9, currency: '¥' },
+    ],
+    hint: '🇨🇳 字节跳动 · 需要在控制台先「开通模型」再获取 endpoint。模型 ID 是「endpoint ID」非模型名',
+    pdfMode: 'image',
+  },
+  moonshot: {
+    label: '月之暗面 Kimi',
+    format: 'openai',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    keyPrefix: 'sk-',
+    keyHint: 'sk-...',
+    keyLink: 'https://platform.moonshot.cn/console/api-keys',
+    endpointLabel: 'api.moonshot.cn',
+    models: [
+      { id: 'moonshot-v1-128k', label: 'Moonshot V1 128K (长文本旗舰)', in: 60, out: 60, currency: '¥' },
+      { id: 'moonshot-v1-32k', label: 'Moonshot V1 32K', in: 24, out: 24, currency: '¥' },
+      { id: 'moonshot-v1-8k', label: 'Moonshot V1 8K', in: 12, out: 12, currency: '¥' },
+    ],
+    hint: '🇨🇳 长上下文友好(128K) · 不原生支持 PDF,会先把 PDF 转成文本',
+    pdfMode: 'text',
+  },
+  zhipu: {
+    label: '智谱 GLM',
+    format: 'openai',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    keyPrefix: '',
+    keyHint: 'xxx.xxx',
+    keyLink: 'https://bigmodel.cn/usercenter/proj-mgmt/apikeys',
+    endpointLabel: 'open.bigmodel.cn',
+    models: [
+      { id: 'glm-4v-plus', label: 'GLM-4V Plus (视觉旗舰)', in: 10, out: 10, currency: '¥' },
+      { id: 'glm-4-plus', label: 'GLM-4 Plus (纯文本旗舰)', in: 50, out: 50, currency: '¥' },
+      { id: 'glm-4-air', label: 'GLM-4 Air (便宜)', in: 0.5, out: 0.5, currency: '¥' },
+    ],
+    hint: '🇨🇳 清华系 · 4V 系列支持图片',
+    pdfMode: 'image',
+  },
+  openrouter: {
+    label: 'OpenRouter (多模型代理)',
+    format: 'openai',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    keyPrefix: 'sk-or-',
+    keyHint: 'sk-or-v1-...',
+    keyLink: 'https://openrouter.ai/keys',
+    endpointLabel: 'openrouter.ai',
+    models: [
+      { id: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4(原生 PDF)', in: 3, out: 15 },
+      { id: 'anthropic/claude-opus-4', label: 'Claude Opus 4(最强)', in: 15, out: 75 },
+      { id: 'openai/gpt-4o', label: 'GPT-4o', in: 2.5, out: 10 },
+      { id: 'google/gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash', in: 0.075, out: 0.3 },
+      { id: 'deepseek/deepseek-chat', label: 'DeepSeek Chat', in: 0.27, out: 1.1 },
+    ],
+    hint: '🌐 一个 Key 用所有模型 · 自动找最便宜节点',
+    pdfMode: 'image',
+  },
+  anthropic: {
+    label: 'Anthropic Claude',
+    format: 'anthropic',
+    baseUrl: 'https://api.anthropic.com',
+    keyPrefix: 'sk-ant-',
+    keyHint: 'sk-ant-api03-...',
+    keyLink: 'https://console.anthropic.com/settings/keys',
+    endpointLabel: 'api.anthropic.com',
+    models: [
+      { id: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5(性价比)', in: 3, out: 15 },
+      { id: 'claude-opus-4-5-20250929', label: 'Claude Opus 4.5(最强)', in: 15, out: 75 },
+      { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5(最快)', in: 1, out: 5 },
+    ],
+    hint: '🌐 海外服务,中国大陆访问需 VPN · 唯一原生 PDF 支持(无需转图)',
+    pdfMode: 'native',
+  },
+  openai: {
+    label: 'OpenAI',
+    format: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    keyPrefix: 'sk-',
+    keyHint: 'sk-...',
+    keyLink: 'https://platform.openai.com/api-keys',
+    endpointLabel: 'api.openai.com',
+    models: [
+      { id: 'gpt-4o', label: 'GPT-4o (旗舰多模态)', in: 2.5, out: 10 },
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini (便宜)', in: 0.15, out: 0.6 },
+      { id: 'o1-mini', label: 'o1 Mini (推理)', in: 3, out: 12 },
+    ],
+    hint: '🌐 海外 · 中国大陆需 VPN',
+    pdfMode: 'image',
+  },
+  custom: {
+    label: '自定义 OpenAI 兼容',
+    format: 'openai',
+    baseUrl: '',
+    keyPrefix: '',
+    keyHint: '...',
+    keyLink: '',
+    endpointLabel: '(自定义)',
+    models: [],
+    hint: '⚙️ 任何 OpenAI 兼容 API · 在上方填 Base URL,模型 ID 自己填',
+    pdfMode: 'image',
+  },
 };
 
 // ─────────── Settings (localStorage) ───────────
-const SETTINGS_KEY = 'cashlens_settings_v1';
+const SETTINGS_KEY = 'cashlens_settings_v2';
 const PROJECTS_KEY = 'cashlens_projects_v1';
 
 function loadSettings() {
@@ -502,10 +668,32 @@ function saveSettingsRaw(s) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 }
 
+function getProvider() {
+  const s = loadSettings();
+  return s.provider || 'deepseek'; // default to DeepSeek (cheap, accessible in China)
+}
+function getProviderConfig() {
+  const s = loadSettings();
+  const p = PROVIDERS[getProvider()];
+  // Custom can override baseUrl
+  if (s.provider === 'custom' && s.customBaseUrl) {
+    return { ...p, baseUrl: s.customBaseUrl };
+  }
+  return p;
+}
 function getApiKey() { return loadSettings().apiKey || ''; }
 function getModel() {
   const s = loadSettings();
-  return s.customModel || s.model || 'claude-sonnet-4-5-20250929';
+  if (s.customModel) return s.customModel;
+  if (s.model) return s.model;
+  // Default to first model of current provider
+  const p = PROVIDERS[getProvider()];
+  return p.models[0]?.id || '';
+}
+function getModelInfo() {
+  const m = getModel();
+  const p = PROVIDERS[getProvider()];
+  return p.models.find(x => x.id === m) || { id: m, in: 1, out: 3 };
 }
 function getThinking() { return parseInt(loadSettings().thinking || 0); }
 function getMaxTokens() { return parseInt(loadSettings().maxTokens || 16384); }
@@ -519,23 +707,64 @@ function updateApiKeyDot() {
 
 function updateModelLabel() {
   const m = getModel();
+  const p = getProviderConfig();
   const t = getThinking();
-  const short = m.replace(/^claude-/, '').replace(/-\d{8}$/, '');
+  const short = m.length > 28 ? m.slice(0, 26) + '…' : m;
   document.getElementById('modelLabel').textContent =
-    `Claude ${short} · 思考${t > 0 ? ` ${(t/1000).toFixed(0)}K` : '关闭'}`;
+    `${p.label} · ${short}${t > 0 ? ` · 思考 ${(t/1000).toFixed(0)}K` : ''}`;
+}
+
+// Refresh model dropdown when provider changes
+function rebuildModelSelect(providerKey, currentModelId) {
+  const p = PROVIDERS[providerKey];
+  const sel = document.getElementById('modelSelect');
+  sel.innerHTML = '';
+  for (const m of p.models) {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    const priceLabel = m.currency
+      ? `(${m.currency}${m.in}/M 输入 · ${m.currency}${m.out}/M 输出)`
+      : `($${m.in}/M 输入 · $${m.out}/M 输出)`;
+    opt.textContent = `${m.label} ${priceLabel}`;
+    sel.appendChild(opt);
+  }
+  const customOpt = document.createElement('option');
+  customOpt.value = 'custom';
+  customOpt.textContent = '自定义模型 ID…';
+  sel.appendChild(customOpt);
+  if (currentModelId && [...sel.options].some(o => o.value === currentModelId)) {
+    sel.value = currentModelId;
+  } else if (currentModelId) {
+    sel.value = 'custom';
+  } else {
+    sel.value = p.models[0]?.id || 'custom';
+  }
+
+  document.getElementById('apiKeyInput').placeholder = p.keyHint;
+  document.getElementById('endpointLabel').textContent = p.endpointLabel;
+  if (p.keyLink) {
+    document.getElementById('getKeyLink').href = p.keyLink;
+    document.getElementById('getKeyLink').classList.remove('hidden');
+  } else {
+    document.getElementById('getKeyLink').classList.add('hidden');
+  }
+  document.getElementById('modelHint').textContent = p.hint || '';
+  document.getElementById('customEndpointWrap').classList.toggle('hidden', providerKey !== 'custom');
 }
 
 // ─────────── Settings Modal ───────────
 function openSettings() {
   const s = loadSettings();
+  const provider = s.provider || 'deepseek';
+  document.getElementById('providerSelect').value = provider;
+  document.getElementById('customBaseUrl').value = s.customBaseUrl || '';
   document.getElementById('apiKeyInput').value = s.apiKey || '';
-  const sel = document.getElementById('modelSelect');
+  rebuildModelSelect(provider, s.customModel || s.model);
   if (s.customModel) {
-    sel.value = 'custom';
+    document.getElementById('modelSelect').value = 'custom';
     document.getElementById('customModel').classList.remove('hidden');
     document.getElementById('customModel').value = s.customModel;
   } else {
-    sel.value = s.model || 'claude-sonnet-4-5-20250929';
     document.getElementById('customModel').classList.add('hidden');
   }
   document.getElementById('thinkingSlider').value = s.thinking || 0;
@@ -564,10 +793,18 @@ document.getElementById('thinkingSlider')?.addEventListener('input', (e) => {
 document.getElementById('modelSelect')?.addEventListener('change', (e) => {
   document.getElementById('customModel').classList.toggle('hidden', e.target.value !== 'custom');
 });
+document.getElementById('providerSelect')?.addEventListener('change', (e) => {
+  // When switching provider, reset to its default model
+  rebuildModelSelect(e.target.value, null);
+  document.getElementById('customModel').classList.add('hidden');
+});
 
 function saveSettings() {
+  const provider = document.getElementById('providerSelect').value;
   const sel = document.getElementById('modelSelect').value;
   const settings = {
+    provider,
+    customBaseUrl: provider === 'custom' ? document.getElementById('customBaseUrl').value.trim() : null,
     apiKey: document.getElementById('apiKeyInput').value.trim(),
     model: sel === 'custom' ? null : sel,
     customModel: sel === 'custom' ? document.getElementById('customModel').value.trim() : null,
@@ -579,11 +816,13 @@ function saveSettings() {
   updateApiKeyDot();
   updateModelLabel();
   closeSettings();
-  toast('设置已保存', 'ok');
+  toast(`已保存 · 当前: ${PROVIDERS[provider].label}`, 'ok');
 }
 
 async function testApiKey() {
   const key = document.getElementById('apiKeyInput').value.trim();
+  const providerKey = document.getElementById('providerSelect').value;
+  const customBaseUrl = document.getElementById('customBaseUrl').value.trim();
   const sel = document.getElementById('modelSelect').value;
   const model = sel === 'custom' ? document.getElementById('customModel').value.trim() : sel;
   const result = document.getElementById('keyTestResult');
@@ -592,28 +831,45 @@ async function testApiKey() {
   result.textContent = '⏳ 测试中…';
   document.getElementById('testIcon').textContent = '⏳';
 
+  const providerCfg = PROVIDERS[providerKey];
+  const baseUrl = providerKey === 'custom' ? customBaseUrl : providerCfg.baseUrl;
+  if (!baseUrl) {
+    result.className = 'mt-2 text-[11.5px] text-err';
+    result.textContent = '✗ 请填写 Base URL';
+    document.getElementById('testIcon').textContent = '🔌';
+    return;
+  }
+
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: model,
-        max_tokens: 8,
-        messages: [{ role: 'user', content: 'ping' }],
-      }),
-    });
+    let r;
+    if (providerCfg.format === 'anthropic') {
+      r = await fetch(`${baseUrl}/v1/messages`, {
+        method: 'POST',
+        headers: {
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ model, max_tokens: 8, messages: [{ role: 'user', content: 'ping' }] }),
+      });
+    } else {
+      r = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${key}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ model, max_tokens: 8, messages: [{ role: 'user', content: 'ping' }] }),
+      });
+    }
     if (r.ok) {
       result.className = 'mt-2 text-[11.5px] text-ok';
-      result.textContent = '✓ 连接成功 · API Key 有效';
+      result.textContent = `✓ ${providerCfg.label} 连接成功`;
     } else {
       const err = await r.json().catch(() => ({}));
       result.className = 'mt-2 text-[11.5px] text-err';
-      result.textContent = `✗ ${err.error?.message || `HTTP ${r.status}`}`;
+      result.textContent = `✗ ${err.error?.message || err.message || `HTTP ${r.status}`}`;
     }
   } catch (e) {
     result.className = 'mt-2 text-[11.5px] text-err';
@@ -665,6 +921,41 @@ function fileToBase64(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+// Convert each PDF page to PNG image (base64). Used by providers that don't natively support PDF.
+async function pdfToImages(file, scale = 1.5) {
+  if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js 未加载,请刷新页面重试');
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const images = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const dataUrl = canvas.toDataURL('image/png');
+    images.push(dataUrl.split(',')[1]); // strip "data:image/png;base64,"
+  }
+  return images;
+}
+
+// Extract text from PDF (no OCR; works only when PDF has text layer).
+async function pdfToText(file) {
+  if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js 未加载');
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    const text = tc.items.map(it => it.str).join(' ');
+    pages.push(`--- Page ${i} ---\n${text}`);
+  }
+  return pages.join('\n\n');
 }
 
 async function handleFiles(files) {
@@ -888,40 +1179,61 @@ function renderMarkdown(md) {
   return md;
 }
 
-// ─────────── Claude API streaming ───────────
-async function streamClaude({ systemPrompt, messages, onText, onUsage, onError }) {
+// ─────────── AI streaming (provider-aware) ───────────
+async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
   const apiKey = getApiKey();
-  if (!apiKey) {
-    onError('请先设置 API Key(右上角 ⚙️)');
-    return;
-  }
+  if (!apiKey) { onError('请先设置 API Key(右上角 ⚙️)'); return; }
   const model = getModel();
   const thinking = getThinking();
   const maxTokens = getMaxTokens();
-
-  const body = {
-    model,
-    max_tokens: maxTokens,
-    system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-    messages,
-    stream: true,
-  };
-  if (thinking > 0) {
-    body.thinking = { type: 'enabled', budget_tokens: thinking };
-  }
+  const provider = getProviderConfig();
 
   let response;
   try {
-    response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    if (provider.format === 'anthropic') {
+      // ─── Anthropic native API ───
+      const body = {
+        model,
+        max_tokens: maxTokens,
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+        messages,
+        stream: true,
+      };
+      if (thinking > 0) body.thinking = { type: 'enabled', budget_tokens: thinking };
+      response = await fetch(`${provider.baseUrl}/v1/messages`, {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    } else {
+      // ─── OpenAI-compatible chat completions ───
+      const body = {
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...messages.map(m => ({
+            role: m.role,
+            content: typeof m.content === 'string' ? m.content : m.content,
+          })),
+        ],
+        max_tokens: maxTokens,
+        stream: true,
+        stream_options: { include_usage: true },
+      };
+      response = await fetch(`${provider.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    }
   } catch (e) {
     onError(`网络错误: ${e.message}`);
     return;
@@ -929,7 +1241,7 @@ async function streamClaude({ systemPrompt, messages, onText, onUsage, onError }
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    onError(err.error?.message || `HTTP ${response.status}: ${response.statusText}`);
+    onError(err.error?.message || err.message || `HTTP ${response.status}: ${response.statusText}`);
     return;
   }
 
@@ -951,24 +1263,151 @@ async function streamClaude({ systemPrompt, messages, onText, onUsage, onError }
       let evType = '', evData = '';
       for (const line of lines) {
         if (line.startsWith('event:')) evType = line.slice(6).trim();
-        else if (line.startsWith('data:')) evData = line.slice(5).trim();
+        else if (line.startsWith('data:')) evData = (evData ? evData + '\n' : '') + line.slice(5).trim();
       }
       if (!evData || evData === '[DONE]') continue;
       try {
         const obj = JSON.parse(evData);
-        if (evType === 'content_block_delta' && obj.delta?.type === 'text_delta') {
-          onText(obj.delta.text);
-        }
-        if (evType === 'message_start' && obj.message?.usage) {
-          usage = { ...usage, ...obj.message.usage };
-        }
-        if (evType === 'message_delta' && obj.usage) {
-          usage = { ...usage, ...obj.usage };
+        if (provider.format === 'anthropic') {
+          if (evType === 'content_block_delta' && obj.delta?.type === 'text_delta') {
+            onText(obj.delta.text);
+          }
+          if (evType === 'message_start' && obj.message?.usage) {
+            usage = { ...usage, ...obj.message.usage };
+          }
+          if (evType === 'message_delta' && obj.usage) {
+            usage = { ...usage, ...obj.usage };
+          }
+        } else {
+          // OpenAI-compatible streaming chunk
+          const delta = obj.choices?.[0]?.delta;
+          if (delta?.content) onText(delta.content);
+          if (obj.usage) {
+            // Map OpenAI usage to common shape
+            usage = {
+              input_tokens: obj.usage.prompt_tokens || 0,
+              output_tokens: obj.usage.completion_tokens || 0,
+              cache_creation_input_tokens: 0,
+              cache_read_input_tokens: 0,
+            };
+          }
         }
       } catch (e) { /* ignore parse errors */ }
     }
   }
   onUsage(usage);
+}
+
+// ─────────── Build user content for each provider ───────────
+// Anthropic: native PDF as document blocks
+// Image-mode (qwen-vl/doubao-vision/openai/gpt-4o/openrouter): convert each PDF page to PNG image
+// Text-mode (deepseek/moonshot/non-vision): extract text from PDFs and prepend
+async function buildUserContent(userText, files, provider) {
+  if (provider.format === 'anthropic' && provider.pdfMode === 'native') {
+    // Native PDF support
+    const content = [{ type: 'text', text: userText }];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const block = {
+        type: f.type === 'application/pdf' ? 'document' : 'image',
+        source: { type: 'base64', media_type: f.type, data: f.base64 },
+      };
+      if (f.type === 'application/pdf') block.title = f.file.name;
+      if (i === files.length - 1) block.cache_control = { type: 'ephemeral' };
+      content.push(block);
+    }
+    return content;
+  }
+
+  if (provider.pdfMode === 'image') {
+    // Convert PDFs to per-page PNG images
+    const progressCard = appendCard(`
+      <div class="bg-surface border border-subtle rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-[13px] font-medium">📄 → 🖼️ 转换 PDF 为图片(多模态模型不直接支持 PDF)</div>
+          <div class="text-[11.5px] text-fg3" id="convProgress">0 / ${files.length}</div>
+        </div>
+        <div class="text-[11px] text-fg3" id="convDetail">准备中…</div>
+      </div>
+    `);
+    const progEl = progressCard.querySelector('#convProgress');
+    const detEl = progressCard.querySelector('#convDetail');
+
+    const allImages = []; // { name, base64, page }
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      detEl.textContent = `${f.file.name}…`;
+      if (f.type === 'application/pdf') {
+        try {
+          const pageImages = await pdfToImages(f.file, 1.5);
+          pageImages.forEach((b64, idx) => allImages.push({ name: f.file.name, base64: b64, page: idx + 1 }));
+        } catch (e) {
+          detEl.textContent = `转换失败: ${e.message}`;
+          throw e;
+        }
+      } else {
+        // Already an image
+        allImages.push({ name: f.file.name, base64: f.base64, page: 1, mediaType: f.type });
+      }
+      progEl.textContent = `${i + 1} / ${files.length}`;
+    }
+    detEl.textContent = `✓ 完成,共 ${allImages.length} 张图片(${files.length} 个 PDF)`;
+
+    if (provider.format === 'anthropic') {
+      const content = [{ type: 'text', text: userText }];
+      allImages.forEach(img => {
+        content.push({
+          type: 'image',
+          source: { type: 'base64', media_type: img.mediaType || 'image/png', data: img.base64 },
+        });
+      });
+      return content;
+    } else {
+      // OpenAI-compatible: text + array of image_url
+      const content = [{ type: 'text', text: userText }];
+      allImages.forEach(img => {
+        content.push({
+          type: 'image_url',
+          image_url: { url: `data:${img.mediaType || 'image/png'};base64,${img.base64}` },
+        });
+      });
+      return content;
+    }
+  }
+
+  // pdfMode === 'text' — extract text from PDFs and inline
+  const progressCard = appendCard(`
+    <div class="bg-surface border border-subtle rounded-xl p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-[13px] font-medium">📄 → 📝 提取 PDF 文本(此模型不支持图片)</div>
+        <div class="text-[11.5px] text-fg3" id="extProgress">0 / ${files.length}</div>
+      </div>
+      <div class="text-[11px] text-warn" id="extWarn">⚠ 仅适合「电子原版 PDF」(银行电子月结单)。扫描件/图片版会失败,建议改用 Qwen VL / 豆包 Vision / Claude / GPT-4o 等多模态模型。</div>
+    </div>
+  `);
+  const progEl = progressCard.querySelector('#extProgress');
+
+  let combinedText = '';
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    if (f.type === 'application/pdf') {
+      try {
+        const text = await pdfToText(f.file);
+        combinedText += `\n\n========== ${f.file.name} ==========\n${text}`;
+      } catch (e) {
+        combinedText += `\n\n========== ${f.file.name} ==========\n[文本提取失败: ${e.message}]`;
+      }
+    } else {
+      combinedText += `\n\n========== ${f.file.name} ==========\n[图片文件,纯文本模型无法处理]`;
+    }
+    progEl.textContent = `${i + 1} / ${files.length}`;
+  }
+
+  if (provider.format === 'anthropic') {
+    return [{ type: 'text', text: userText + '\n\n[以下为各 PDF 提取的文本内容]\n' + combinedText }];
+  }
+  // OpenAI-compatible plain text
+  return userText + '\n\n[以下为各 PDF 提取的文本内容]\n' + combinedText;
 }
 
 // ─────────── Main flow ───────────
@@ -1009,38 +1448,18 @@ ${fileList}
 - 末尾给出 BIR51 / Management Rep Letter / 审计调整分录建议
 - 全部金额自验,误差 0.00`;
 
-  // Build user content with PDFs
-  const userContent = [{ type: 'text', text: userText }];
-  for (let i = 0; i < stagedFiles.length; i++) {
-    const f = stagedFiles[i];
-    const block = {
-      type: f.type === 'application/pdf' ? 'document' : 'image',
-      source: {
-        type: 'base64',
-        media_type: f.type,
-        data: f.base64,
-      },
-    };
-    if (f.type === 'application/pdf') {
-      block.title = f.file.name;
-    }
-    // Cache the LAST document block to maximize cache reuse on follow-ups
-    if (i === stagedFiles.length - 1) {
-      block.cache_control = { type: 'ephemeral' };
-    }
-    userContent.push(block);
-  }
-
-  // Switch UI to chat mode
+  // Switch UI to chat mode early so user sees PDF conversion progress
   document.getElementById('emptyState').classList.add('hidden');
   document.getElementById('chatStream').classList.remove('hidden');
   document.getElementById('chatStream').innerHTML = '';
   document.getElementById('fileStaging').classList.add('hidden');
   document.getElementById('composer').classList.remove('hidden');
   __cardSeq = 0;
-
-  // User bubble (display-only, simplified)
   appendUserBubble(`分析 ${company} · ${periodStart} ~ ${periodEnd} · ${stagedFiles.length} 份月结单`);
+
+  // Build user content per provider's PDF mode
+  const provider = getProviderConfig();
+  const userContent = await buildUserContent(userText, stagedFiles, provider);
 
   // Assistant stream
   const dotsCard = thinkingDots();
@@ -1050,7 +1469,7 @@ ${fileList}
 
   document.getElementById('detailHeader').textContent = '分析中…';
 
-  await streamClaude({
+  await streamAI({
     systemPrompt: getSystemPrompt(),
     messages: [{ role: 'user', content: userContent }],
     onText: (chunk) => {
@@ -1078,11 +1497,20 @@ ${fileList}
       updateCostChip(usage);
       document.getElementById('detailHeader').textContent = '分析完成';
       saveProject({ company, periodStart, periodEnd, fullText, usage, files: stagedFiles.map(f => f.file.name) });
-      // Save messages for follow-ups
-      chatMessages = [
-        { role: 'user', content: userContent },
-        { role: 'assistant', content: [{ type: 'text', text: fullText }] }
-      ];
+      // Save messages for follow-ups (provider-aware shape)
+      const provider2 = getProviderConfig();
+      if (provider2.format === 'anthropic') {
+        chatMessages = [
+          { role: 'user', content: userContent },
+          { role: 'assistant', content: [{ type: 'text', text: fullText }] }
+        ];
+      } else {
+        // For OpenAI-compatible follow-ups, drop the heavy image attachments and keep just the text instruction
+        chatMessages = [
+          { role: 'user', content: typeof userContent === 'string' ? userContent : userText },
+          { role: 'assistant', content: fullText }
+        ];
+      }
       toast('分析完成', 'ok');
     },
     onError: (err) => {
@@ -1112,7 +1540,7 @@ async function sendFollowup() {
   let assistantId;
   let fullText = '';
 
-  await streamClaude({
+  await streamAI({
     systemPrompt: getSystemPrompt(),
     messages: chatMessages,
     onText: (chunk) => {
@@ -1130,7 +1558,13 @@ async function sendFollowup() {
       if (firstChunk) { dotsCard.remove(); return; }
       finalizeAssistant(assistantId, fullText);
       updateCostChip(usage, true);
-      chatMessages.push({ role: 'assistant', content: [{ type: 'text', text: fullText }] });
+      const provider = getProviderConfig();
+      // Store assistant message in provider-appropriate format
+      if (provider.format === 'anthropic') {
+        chatMessages.push({ role: 'assistant', content: [{ type: 'text', text: fullText }] });
+      } else {
+        chatMessages.push({ role: 'assistant', content: fullText });
+      }
     },
     onError: (err) => {
       dotsCard.remove();
@@ -1142,18 +1576,20 @@ async function sendFollowup() {
 // ─────────── Cost chip ───────────
 let __sessionCost = 0;
 function updateCostChip(usage, accumulate = false) {
-  const m = getModel();
-  const p = PRICING[m] || { in: 3, out: 15 };
+  const mi = getModelInfo();
   const inTokens = (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
   const cachedTokens = usage.cache_read_input_tokens || 0;
   const outTokens = usage.output_tokens || 0;
-  const cost = (inTokens / 1e6) * p.in + (cachedTokens / 1e6) * p.in * 0.1 + (outTokens / 1e6) * p.out;
+  const inRate = mi.in || 1;
+  const outRate = mi.out || 3;
+  const cost = (inTokens / 1e6) * inRate + (cachedTokens / 1e6) * inRate * 0.1 + (outTokens / 1e6) * outRate;
   if (accumulate) __sessionCost += cost;
   else __sessionCost = cost;
   const totalIn = inTokens + cachedTokens;
+  const symbol = mi.currency || '$';
   document.getElementById('costChip').innerHTML = `
-    <span class="w-1.5 h-1.5 rounded-full bg-${cost > 5 ? 'warn' : 'ok'}"></span>
-    <span class="tabular">$${__sessionCost.toFixed(2)}</span>
+    <span class="w-1.5 h-1.5 rounded-full bg-${__sessionCost > 5 ? 'warn' : 'ok'}"></span>
+    <span class="tabular">${symbol}${__sessionCost.toFixed(2)}</span>
     <span class="text-fg3">·</span>
     <span class="tabular">${(totalIn/1000).toFixed(1)}K + ${(outTokens/1000).toFixed(1)}K</span>
   `;
