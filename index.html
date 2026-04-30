@@ -696,14 +696,18 @@ const PROVIDERS = {
     keyLink: 'https://api.aipaibox.com',
     endpointLabel: 'api.aipaibox.com',
     models: [
-      { id: 'gpt-4o-mini', label: 'GPT-4o Mini(便宜)', in: 1, out: 4, currency: '¥' },
-      { id: 'gpt-4o', label: 'GPT-4o(标准)', in: 18, out: 72, currency: '¥' },
-      { id: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5(审计推荐)', in: 22, out: 110, currency: '¥' },
-      { id: 'claude-opus-4-5-20250929', label: 'Claude Opus 4.5(最强)', in: 110, out: 540, currency: '¥' },
-      { id: 'deepseek-chat', label: 'DeepSeek Chat(便宜,纯文本)', in: 2, out: 8, currency: '¥' },
-      { id: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash(便宜多模态)', in: 0.5, out: 2, currency: '¥' },
+      // GPT-5 系列(部分 aipaibox 套餐唯一可用)
+      { id: 'gpt-5.4', label: 'GPT-5.4(推荐,支持视觉)', in: 5, out: 20, currency: '¥' },
+      { id: 'gpt-5.5', label: 'GPT-5.5(更强,但贵)', in: 10, out: 40, currency: '¥' },
+      // 其他模型(需要套餐开通)
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini(需开通)', in: 1, out: 4, currency: '¥' },
+      { id: 'gpt-4o', label: 'GPT-4o(需开通)', in: 18, out: 72, currency: '¥' },
+      { id: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5(需开通)', in: 22, out: 110, currency: '¥' },
+      { id: 'claude-opus-4-5-20250929', label: 'Claude Opus 4.5(需开通)', in: 110, out: 540, currency: '¥' },
+      { id: 'deepseek-chat', label: 'DeepSeek Chat(需开通,纯文本)', in: 2, out: 8, currency: '¥' },
+      { id: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash(需开通)', in: 0.5, out: 2, currency: '¥' },
     ],
-    hint: '🇨🇳 国内中转站(基于 new-api/oneapi)· 一个 Key 用多家模型 · CORS 已开放',
+    hint: '🇨🇳 aipaibox 中转 · 不同套餐能用的模型不同,先试 gpt-5.4(基础套餐都有)· 失败提示「No available channel」就换一个',
     pdfMode: 'image',
   },
   oneapi: {
