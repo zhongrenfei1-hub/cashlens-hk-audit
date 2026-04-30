@@ -379,6 +379,8 @@ tailwind.config = {
           <option value="doubao">字节跳动 豆包 (火山方舟 · 国内)</option>
           <option value="moonshot">月之暗面 Kimi (Moonshot · 国内)</option>
           <option value="zhipu">智谱 GLM (BigModel · 国内)</option>
+          <option value="aipaibox">aipaibox 中转站(国内多模型聚合)</option>
+          <option value="oneapi">其他 oneapi/new-api 中转站</option>
           <option value="openrouter">OpenRouter(代理多家模型)</option>
           <option value="anthropic">Anthropic Claude(海外)</option>
           <option value="openai">OpenAI(海外)</option>
@@ -685,6 +687,43 @@ const PROVIDERS = {
     hint: '🌐 一个 Key 用所有模型 · 自动找最便宜节点',
     pdfMode: 'image',
   },
+  aipaibox: {
+    label: 'aipaibox 中转站',
+    format: 'openai',
+    baseUrl: 'https://api.aipaibox.com/v1',
+    keyPrefix: 'sk-',
+    keyHint: 'sk-...(从 aipaibox 复制)',
+    keyLink: 'https://api.aipaibox.com',
+    endpointLabel: 'api.aipaibox.com',
+    models: [
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini(便宜)', in: 1, out: 4, currency: '¥' },
+      { id: 'gpt-4o', label: 'GPT-4o(标准)', in: 18, out: 72, currency: '¥' },
+      { id: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5(审计推荐)', in: 22, out: 110, currency: '¥' },
+      { id: 'claude-opus-4-5-20250929', label: 'Claude Opus 4.5(最强)', in: 110, out: 540, currency: '¥' },
+      { id: 'deepseek-chat', label: 'DeepSeek Chat(便宜,纯文本)', in: 2, out: 8, currency: '¥' },
+      { id: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash(便宜多模态)', in: 0.5, out: 2, currency: '¥' },
+    ],
+    hint: '🇨🇳 国内中转站(基于 new-api/oneapi)· 一个 Key 用多家模型 · CORS 已开放',
+    pdfMode: 'image',
+  },
+  oneapi: {
+    label: '其他 oneapi/new-api 中转站',
+    format: 'openai',
+    baseUrl: '',
+    keyPrefix: 'sk-',
+    keyHint: 'sk-...',
+    keyLink: '',
+    endpointLabel: '(填 Base URL)',
+    models: [
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini', in: 1, out: 4, currency: '¥' },
+      { id: 'gpt-4o', label: 'GPT-4o', in: 18, out: 72, currency: '¥' },
+      { id: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', in: 22, out: 110, currency: '¥' },
+      { id: 'deepseek-chat', label: 'DeepSeek Chat', in: 2, out: 8, currency: '¥' },
+      { id: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash', in: 0.5, out: 2, currency: '¥' },
+    ],
+    hint: '🇨🇳 同 aipaibox 类型(oneapi/new-api/fastapi.ai 等)· 自己填 Base URL',
+    pdfMode: 'image',
+  },
   anthropic: {
     label: 'Anthropic Claude',
     format: 'anthropic',
@@ -751,8 +790,8 @@ function getProvider() {
 function getProviderConfig() {
   const s = loadSettings();
   const p = PROVIDERS[getProvider()];
-  // Custom can override baseUrl
-  if (s.provider === 'custom' && s.customBaseUrl) {
+  // Custom and oneapi types use user-supplied baseUrl
+  if ((s.provider === 'custom' || s.provider === 'oneapi') && s.customBaseUrl) {
     return { ...p, baseUrl: s.customBaseUrl };
   }
   return p;
@@ -825,7 +864,7 @@ function rebuildModelSelect(providerKey, currentModelId) {
     document.getElementById('getKeyLink').classList.add('hidden');
   }
   document.getElementById('modelHint').textContent = p.hint || '';
-  document.getElementById('customEndpointWrap').classList.toggle('hidden', providerKey !== 'custom');
+  document.getElementById('customEndpointWrap').classList.toggle('hidden', providerKey !== 'custom' && providerKey !== 'oneapi');
 }
 
 // ─────────── Settings Modal ───────────
@@ -881,13 +920,26 @@ document.getElementById('providerSelect')?.addEventListener('change', (e) => {
   document.getElementById('customModel').classList.add('hidden');
 });
 
+// Normalize a user-entered base URL: strip trailing slash, add /v1 if missing
+function normalizeBaseUrl(url) {
+  if (!url) return url;
+  url = url.trim().replace(/\/+$/, ''); // strip trailing slashes
+  // If it doesn't end with /v1 (or some version like /v2, /api/v1), append /v1
+  if (!/\/v\d+$|\/api\/v\d+$/.test(url)) {
+    url += '/v1';
+  }
+  return url;
+}
+
 function saveSettings() {
   const provider = document.getElementById('providerSelect').value;
   const sel = document.getElementById('modelSelect').value;
+  const rawBaseUrl = document.getElementById('customBaseUrl').value.trim();
   const settings = {
     provider,
-    customBaseUrl: provider === 'custom' ? document.getElementById('customBaseUrl').value.trim() : null,
-    apiKey: document.getElementById('apiKeyInput').value.trim(),
+    // Auto-fix: append /v1 if user forgets, for both 'custom' and 'oneapi' types
+    customBaseUrl: (provider === 'custom' || provider === 'oneapi') ? normalizeBaseUrl(rawBaseUrl) : null,
+    apiKey: document.getElementById('apiKeyInput').value.trim().replace(/^["']|["']$/g, ''), // strip stray quotes
     model: sel === 'custom' ? null : sel,
     customModel: sel === 'custom' ? document.getElementById('customModel').value.trim() : null,
     thinking: parseInt(document.getElementById('thinkingSlider').value),
@@ -914,7 +966,10 @@ async function testApiKey() {
   document.getElementById('testIcon').textContent = '⏳';
 
   const providerCfg = PROVIDERS[providerKey];
-  const baseUrl = providerKey === 'custom' ? customBaseUrl : providerCfg.baseUrl;
+  // Custom + oneapi use user-supplied URL (auto-fix: add /v1 if missing)
+  const baseUrl = (providerKey === 'custom' || providerKey === 'oneapi')
+    ? normalizeBaseUrl(customBaseUrl)
+    : providerCfg.baseUrl;
   if (!baseUrl) {
     result.className = 'mt-2 text-[11.5px] text-err';
     result.textContent = '✗ 请填写 Base URL';
@@ -954,7 +1009,13 @@ async function testApiKey() {
     } else {
       const err = await r.json().catch(() => ({}));
       result.className = 'mt-2 text-[11.5px] text-err';
-      result.textContent = `✗ ${err.error?.message || err.message || `HTTP ${r.status}`}`;
+      const msg = err.error?.message || err.message || `HTTP ${r.status}`;
+      let hint = '';
+      if (r.status === 401 || /invalid.*token|invalid.*key/i.test(msg)) hint = ' · Key 无效或带了引号空格';
+      else if (r.status === 404) hint = ' · 端点错误,Base URL 可能漏了 /v1';
+      else if (r.status === 429) hint = ' · 余额不足或限速';
+      else if (r.status === 400 && /model/i.test(msg)) hint = ' · 模型 ID 不对';
+      result.textContent = `✗ ${msg}${hint}`;
     }
   } catch (e) {
     result.className = 'mt-2 text-[11.5px] text-err';
@@ -1326,7 +1387,21 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    onError(err.error?.message || err.message || `HTTP ${response.status}: ${response.statusText}`);
+    const msg = err.error?.message || err.message || `HTTP ${response.status}: ${response.statusText}`;
+    // Add hint for common issues
+    let hint = '';
+    if (response.status === 401 || /invalid.*token|invalid.*key|unauthorized/i.test(msg)) {
+      hint = '\n\n💡 提示:Key 无效。检查 ① 复制时是否带了引号空格 ② Key 是否还有效 ③ 服务商是否已充值';
+    } else if (response.status === 404) {
+      hint = '\n\n💡 提示:端点 404。可能是 Base URL 错了 — 应该带 /v1,例如 https://xxx.com/v1';
+    } else if (response.status === 429) {
+      hint = '\n\n💡 提示:超限。账户余额不足或被限速,等几秒重试';
+    } else if (/cors|cross-origin/i.test(msg)) {
+      hint = '\n\n💡 提示:CORS 拦截。该服务商不支持浏览器直连,换一家(aipaibox/openrouter 都支持)';
+    } else if (response.status === 400 && /model/i.test(msg)) {
+      hint = '\n\n💡 提示:模型 ID 错误。在该服务商控制台查「模型列表」,确认这个 ID 已开通';
+    }
+    onError(msg + hint);
     return;
   }
 
