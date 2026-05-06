@@ -9,6 +9,11 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<!-- Multi-format file parsers -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.7.2/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
 if (typeof pdfjsLib !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -299,13 +304,15 @@ tailwind.config = {
             </svg>
           </div>
           <h2 class="text-xl font-semibold text-fg1 mb-2">把月结单拖到这里</h2>
-          <p class="text-sm text-fg2 mb-1">支持多 PDF · 单文件最大 30 MB · 全部文件总计建议 ≤ 100 MB</p>
-          <p class="text-[12px] text-fg3 mb-6">大新 · 恒生 · 渣打 · HSBC · BOC · DBS · Airwallex 等 12 家银行格式</p>
+          <p class="text-sm text-fg2 mb-1">客户给您什么都行 — 自动识别并解析</p>
+          <p class="text-[12px] text-fg3 mb-2">📄 PDF · 🖼️ JPG/PNG/HEIC · 📊 Excel · 📋 CSV · 📝 Word · 🗂️ ZIP · ✉️ Email · 🗄️ SQLite</p>
+          <p class="text-[11px] text-fg3 mb-6">单文件 ≤ 64 MB · 自动识别银行 · ZIP 自动展开 · HEIC 自动转 JPEG</p>
           <label for="fileInput" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-elevated border border-subtle hover:border-line text-sm font-medium cursor-pointer transition">
             <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M11 7H3M11 7l-3-3M11 7l-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-90 7 7)"/></svg>
             选择文件
           </label>
-          <input id="fileInput" type="file" multiple accept="application/pdf,image/*" />
+          <input id="fileInput" type="file" multiple
+                 accept="application/pdf,image/*,.heic,.heif,.xlsx,.xls,.xlsm,.csv,.tsv,.docx,.zip,.eml,.msg,.txt,.md,.json,.db,.sqlite,.sqlite3" />
         </div>
 
         <div class="mt-6 max-w-2xl w-full">
@@ -834,7 +841,18 @@ receipts that contribute to revenue/turnover for tax purposes.
 ④ 已排除项目分类说明 + 每类至少 2 笔示例
 ⑤ 与 BIR51 / 管理层声明书 / FS Cash 余额的对接点
 ⑥ 审计轨迹(每笔 borderline 详细判断)
-末尾追加 Audit Sign-off Block(日期、底稿编号、Prepared/Reviewed by)。`;
+末尾追加 Audit Sign-off Block(日期、底稿编号、Prepared/Reviewed by)。
+
+[多文件交叉验证 — 当用户同时提交 PDF 月结单 + 其他类型资料时执行]
+本工具支持客户提交多种文件类型,会在输入末尾以"附加文本资料"形式注入:
+- Excel/CSV 账目表 → 与月结单入账逐笔对账,标注"账实不符"
+- Word 合同 / EML 邮件 → 验证关联方付款的真实贸易合同支撑
+- SQLite 数据库 → 引用为客户主数据,验证付款方身份
+
+当出现这类辅助资料时,在【第 4 段 · 详细说明】里增加一节:
+═══ ⑦ 外部资料交叉验证结果 ═══
+- 用 ✓(完全对得上)/ ⚠(部分对得上)/ ✗(对不上)的标记列出每条比对
+- 对每条 ✗ 给出建议(向客户索取凭证 / 调整分录 / 标记为审计风险)`;
 
 // ─────────── Provider config ───────────
 // Each provider: format='anthropic' | 'openai' (compatible chat completions)
@@ -1359,24 +1377,218 @@ async function pdfToText(file) {
   return pages.join('\n\n');
 }
 
-async function handleFiles(files) {
+// ─────────── Multi-format file parsers ───────────
+// All run in browser. Original code, using open-source libs (SheetJS/mammoth/heic2any/JSZip/sql.js/Tesseract).
+
+function classifyFile(file) {
+  const name = (file.name || '').toLowerCase();
+  const mime = file.type || '';
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+  if (name.endsWith('.heic') || name.endsWith('.heif') || mime === 'image/heic' || mime === 'image/heif') return 'heic';
+  if (mime.startsWith('image/')) return 'image';
+  if (/\.(xlsx|xls|xlsm|xlsb|ods)$/.test(name)) return 'excel';
+  if (/\.(csv|tsv)$/.test(name)) return 'csv';
+  if (name.endsWith('.docx')) return 'docx';
+  if (name.endsWith('.zip')) return 'zip';
+  if (/\.(eml|msg)$/.test(name)) return 'eml';
+  if (/\.(db|sqlite|sqlite3)$/.test(name)) return 'sqlite';
+  if (/\.(txt|md|json|log|tab)$/.test(name) || mime.startsWith('text/')) return 'text';
+  return 'unknown';
+}
+
+const TYPE_META = {
+  pdf:    { icon: '📄', label: 'PDF' },
+  image:  { icon: '🖼️', label: '图片' },
+  heic:   { icon: '🖼️', label: 'HEIC' },
+  excel:  { icon: '📊', label: 'Excel' },
+  csv:    { icon: '📋', label: 'CSV' },
+  docx:   { icon: '📝', label: 'Word' },
+  zip:    { icon: '🗂️', label: 'ZIP' },
+  eml:    { icon: '✉️', label: 'Email' },
+  sqlite: { icon: '🗄️', label: 'SQLite' },
+  text:   { icon: '📃', label: '文本' },
+  unknown:{ icon: '❔', label: '未知' },
+};
+
+async function convertHeicToJpeg(file) {
+  if (typeof heic2any === 'undefined') throw new Error('heic2any 未加载');
+  const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 });
+  const out = blob instanceof Blob ? blob : (Array.isArray(blob) ? blob[0] : blob);
+  const newName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
+  return new File([out], newName, { type: 'image/jpeg' });
+}
+
+async function parseExcelText(file) {
+  if (typeof XLSX === 'undefined') throw new Error('SheetJS 未加载');
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  const out = [];
+  for (const sheet of wb.SheetNames) {
+    const ws = wb.Sheets[sheet];
+    const tsv = XLSX.utils.sheet_to_csv(ws, { FS: '\t', strip: true });
+    if (tsv.trim()) out.push(`[Sheet: ${sheet}]\n${tsv.trim()}`);
+  }
+  return out.join('\n\n');
+}
+
+async function parseCsvText(file) {
+  return await file.text();
+}
+
+async function parseDocxText(file) {
+  if (typeof mammoth === 'undefined') throw new Error('mammoth 未加载');
+  const buf = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer: buf });
+  return result.value || '';
+}
+
+async function expandZip(file) {
+  if (typeof JSZip === 'undefined') throw new Error('JSZip 未加载');
+  const zip = await JSZip.loadAsync(file);
+  const inner = [];
+  for (const path of Object.keys(zip.files)) {
+    const entry = zip.files[path];
+    if (entry.dir) continue;
+    if (path.startsWith('__MACOSX/') || path.endsWith('/.DS_Store') || path.endsWith('Thumbs.db')) continue;
+    const blob = await entry.async('blob');
+    // Try to repair filename encoding (zip files often have GBK names)
+    let displayName = path.split('/').pop();
+    inner.push(new File([blob], displayName, { type: blob.type || '' }));
+  }
+  return inner;
+}
+
+async function parseEmlText(file) {
+  const text = await file.text();
+  const headerEnd = text.search(/\r?\n\r?\n/);
+  const headerStr = headerEnd > 0 ? text.slice(0, headerEnd) : text;
+  const body = headerEnd > 0 ? text.slice(headerEnd + (text.charAt(headerEnd) === '\r' ? 4 : 2)) : '';
+  const get = (h) => {
+    const m = new RegExp(`^${h}:\\s*(.+(?:\\r?\\n[ \\t].+)*)`, 'mi').exec(headerStr);
+    return m ? m[1].replace(/\r?\n[ \t]+/g, ' ').trim() : '';
+  };
+  // strip common MIME boundaries / quoted-printable noise; keep first text part
+  let cleanBody = body;
+  const plainIdx = body.search(/Content-Type:\s*text\/plain/i);
+  if (plainIdx >= 0) {
+    const partStart = body.slice(plainIdx).search(/\r?\n\r?\n/);
+    if (partStart > 0) cleanBody = body.slice(plainIdx + partStart + 4).split(/\r?\n--/)[0];
+  }
+  cleanBody = cleanBody.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
+  const headers = ['From','To','Cc','Subject','Date'].map(h => `${h}: ${get(h)}`).filter(l => !l.endsWith(': ')).join('\n');
+  return `${headers}\n\n${cleanBody.trim()}`;
+}
+
+let __sqlInited = null;
+async function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+async function parseSqliteText(file) {
+  if (!__sqlInited) {
+    if (typeof initSqlJs === 'undefined') {
+      await loadScript('https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js');
+    }
+    __sqlInited = await initSqlJs({ locateFile: f => `https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/${f}` });
+  }
+  const buf = await file.arrayBuffer();
+  const db = new __sqlInited.Database(new Uint8Array(buf));
+  const tablesRes = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")[0];
+  const tables = (tablesRes?.values || []).map(r => r[0]);
+  const out = [];
+  for (const t of tables) {
+    out.push(`[Table: ${t}]`);
+    try {
+      const sample = db.exec(`SELECT * FROM "${t}" LIMIT 20`)[0];
+      if (sample) {
+        out.push(sample.columns.join('\t'));
+        sample.values.forEach(r => out.push(r.map(v => v == null ? '' : String(v)).join('\t')));
+      }
+    } catch (e) { out.push(`(error: ${e.message})`); }
+    out.push('');
+  }
+  db.close();
+  return out.join('\n');
+}
+
+async function ocrImageText(fileOrBlob, lang = 'chi_sim+eng') {
+  if (typeof Tesseract === 'undefined') {
+    await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js');
+  }
+  const { data: { text } } = await Tesseract.recognize(fileOrBlob, lang, { logger: () => {} });
+  return text;
+}
+
+async function handleFiles(fileList, depth = 0) {
+  const files = Array.from(fileList);
   for (const f of files) {
-    if (f.type !== 'application/pdf' && !f.type.startsWith('image/')) {
-      toast(`跳过非 PDF/图片: ${f.name}`, 'warn');
+    // Size guard (raise to 64 MB; ZIP can be larger)
+    if (f.size > 64 * 1024 * 1024) {
+      toast(`跳过 ${f.name}(${(f.size/1024/1024).toFixed(1)} MB > 64 MB)`, 'warn');
       continue;
     }
-    if (f.size > 32 * 1024 * 1024) {
-      toast(`跳过 ${f.name}(${(f.size/1024/1024).toFixed(1)} MB > 32 MB)`, 'warn');
-      continue;
+    const cat = classifyFile(f);
+
+    try {
+      if (cat === 'pdf') {
+        const base64 = await fileToBase64(f);
+        stagedFiles.push({ file: f, base64, type: 'application/pdf', category: 'pdf', subcat: 'pdf', sizeKB: Math.round(f.size/1024), bank: detectBank(f.name) });
+      }
+      else if (cat === 'image') {
+        const base64 = await fileToBase64(f);
+        stagedFiles.push({ file: f, base64, type: f.type || 'image/png', category: 'image', subcat: 'image', sizeKB: Math.round(f.size/1024), bank: detectBank(f.name) });
+      }
+      else if (cat === 'heic') {
+        toast(`HEIC 转 JPEG: ${f.name}`, 'info');
+        const jpeg = await convertHeicToJpeg(f);
+        const base64 = await fileToBase64(jpeg);
+        stagedFiles.push({ file: jpeg, base64, type: 'image/jpeg', category: 'image', subcat: 'heic', sizeKB: Math.round(jpeg.size/1024), bank: detectBank(f.name), origName: f.name });
+      }
+      else if (cat === 'excel') {
+        const text = await parseExcelText(f);
+        stagedFiles.push({ file: f, text, category: 'text', subcat: 'excel', sizeKB: Math.round(f.size/1024), bank: '账目表 / 流水表', type: 'text/excel' });
+      }
+      else if (cat === 'csv') {
+        const text = await parseCsvText(f);
+        stagedFiles.push({ file: f, text, category: 'text', subcat: 'csv', sizeKB: Math.round(f.size/1024), bank: detectBank(f.name) || 'CSV 数据', type: 'text/csv' });
+      }
+      else if (cat === 'docx') {
+        const text = await parseDocxText(f);
+        stagedFiles.push({ file: f, text, category: 'text', subcat: 'docx', sizeKB: Math.round(f.size/1024), bank: 'Word 文档', type: 'text/docx' });
+      }
+      else if (cat === 'zip') {
+        if (depth >= 2) { toast(`ZIP 嵌套过深: ${f.name}`, 'warn'); continue; }
+        toast(`展开 ZIP: ${f.name}`, 'info');
+        const inner = await expandZip(f);
+        await handleFiles(inner, depth + 1);
+        // don't add the zip itself
+        continue;
+      }
+      else if (cat === 'eml') {
+        const text = await parseEmlText(f);
+        stagedFiles.push({ file: f, text, category: 'text', subcat: 'eml', sizeKB: Math.round(f.size/1024), bank: '邮件', type: 'text/eml' });
+      }
+      else if (cat === 'sqlite') {
+        toast(`解析 SQLite: ${f.name}`, 'info');
+        const text = await parseSqliteText(f);
+        stagedFiles.push({ file: f, text, category: 'text', subcat: 'sqlite', sizeKB: Math.round(f.size/1024), bank: '数据库', type: 'text/sqlite' });
+      }
+      else if (cat === 'text') {
+        const text = await f.text();
+        stagedFiles.push({ file: f, text, category: 'text', subcat: 'text', sizeKB: Math.round(f.size/1024), bank: '文本', type: 'text/plain' });
+      }
+      else {
+        toast(`不支持: ${f.name}(${f.type || '未知格式'})`, 'warn');
+        continue;
+      }
+    } catch (e) {
+      console.error(e);
+      toast(`解析失败 ${f.name}: ${e.message || e}`, 'err');
     }
-    const base64 = await fileToBase64(f);
-    stagedFiles.push({
-      file: f,
-      base64,
-      sizeKB: Math.round(f.size / 1024),
-      bank: detectBank(f.name),
-      type: f.type,
-    });
   }
   renderStagedFiles();
 }
@@ -1403,15 +1615,32 @@ function renderStagedFiles() {
   const totalKB = stagedFiles.reduce((s, f) => s + f.sizeKB, 0);
   document.getElementById('fileSize').textContent = totalKB > 1024 ? `${(totalKB/1024).toFixed(1)} MB` : `${totalKB} KB`;
 
-  pills.innerHTML = stagedFiles.map((f, i) => `
+  // Group by category for header summary
+  const counts = {};
+  stagedFiles.forEach(f => { const k = f.subcat || f.category; counts[k] = (counts[k]||0) + 1; });
+  const summary = Object.entries(counts).map(([k,v]) => {
+    const meta = TYPE_META[k] || TYPE_META[stagedFiles.find(f => (f.subcat||f.category)===k)?.category] || TYPE_META.unknown;
+    return `${meta.icon} ${meta.label}×${v}`;
+  }).join(' · ');
+  const summaryEl = document.getElementById('fileSummary');
+  if (summaryEl) summaryEl.textContent = summary;
+
+  pills.innerHTML = stagedFiles.map((f, i) => {
+    const meta = TYPE_META[f.subcat] || TYPE_META[f.category] || TYPE_META.unknown;
+    const displayName = f.origName || f.file.name;
+    // For text-content files, show line count instead of bytes
+    const sizeLabel = f.category === 'text' && f.text
+      ? `${f.text.split('\n').length} 行`
+      : (f.sizeKB > 1024 ? `${(f.sizeKB/1024).toFixed(1)} MB` : `${f.sizeKB} KB`);
+    return `
     <div class="flex items-center gap-2 px-2.5 py-1.5 bg-surface border border-subtle rounded-lg text-[11.5px]">
-      <span class="text-accent2">📄</span>
-      <span class="text-fg1 max-w-[200px] truncate font-mono text-[11px]">${escapeHtml(f.file.name)}</span>
-      <span class="chip bg-elevated text-fg2 border border-subtle">${f.bank}</span>
-      <span class="text-fg3 tabular">${f.sizeKB} KB</span>
-      <button onclick="removeFile(${i})" class="text-fg3 hover:text-err text-[14px]">✕</button>
-    </div>
-  `).join('');
+      <span title="${meta.label}">${meta.icon}</span>
+      <span class="text-fg1 max-w-[200px] truncate font-mono text-[11px]">${escapeHtml(displayName)}</span>
+      <span class="chip bg-elevated text-fg2 border border-subtle">${escapeHtml(f.bank)}</span>
+      <span class="text-fg3 tabular">${sizeLabel}</span>
+      <button onclick="removeFile(${i})" class="text-fg3 hover:text-err text-[14px]" title="移除">✕</button>
+    </div>`;
+  }).join('');
 }
 
 // File input + drag drop
@@ -2050,115 +2279,144 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
 }
 
 // ─────────── Build user content for each provider ───────────
-// Anthropic: native PDF as document blocks
-// Image-mode (qwen-vl/doubao-vision/openai/gpt-4o/openrouter): convert each PDF page to PNG image
-// Text-mode (deepseek/moonshot/non-vision): extract text from PDFs and prepend
+// Now handles 3 categories: pdf, image, text (Excel/CSV/Word/EML/SQLite/etc).
 async function buildUserContent(userText, files, provider) {
+  // Split into binary (PDF/image) and text-content
+  const binFiles  = files.filter(f => f.category === 'pdf' || f.category === 'image');
+  const textFiles = files.filter(f => f.category === 'text');
+
+  // Build text supplement from non-binary files (Excel/CSV/Word/EML/SQLite/etc)
+  let textSupplement = '';
+  if (textFiles.length > 0) {
+    textSupplement = `\n\n【附加文本资料(${textFiles.length} 份)】\n`;
+    for (const tf of textFiles) {
+      const meta = TYPE_META[tf.subcat] || TYPE_META[tf.category] || TYPE_META.unknown;
+      const label = meta.label;
+      // Truncate huge text to keep prompt lean (per-file cap 80K chars; total max ~250K)
+      let body = tf.text || '';
+      if (body.length > 80000) body = body.slice(0, 80000) + `\n\n…[已截断,原文 ${tf.text.length} 字符]`;
+      textSupplement += `\n========== ${label}: ${tf.file.name} ==========\n${body}\n`;
+    }
+  }
+
+  const enrichedUserText = userText + textSupplement;
+
+  // ───── Anthropic native PDF mode ─────
   if (provider.format === 'anthropic' && provider.pdfMode === 'native') {
-    // Native PDF support
-    const content = [{ type: 'text', text: userText }];
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i];
+    const content = [{ type: 'text', text: enrichedUserText }];
+    for (let i = 0; i < binFiles.length; i++) {
+      const f = binFiles[i];
       const block = {
-        type: f.type === 'application/pdf' ? 'document' : 'image',
+        type: f.category === 'pdf' ? 'document' : 'image',
         source: { type: 'base64', media_type: f.type, data: f.base64 },
       };
-      if (f.type === 'application/pdf') block.title = f.file.name;
-      if (i === files.length - 1) block.cache_control = { type: 'ephemeral' };
+      if (f.category === 'pdf') block.title = f.file.name;
+      if (i === binFiles.length - 1) block.cache_control = { type: 'ephemeral' };
       content.push(block);
     }
     return content;
   }
 
+  // ───── Image mode (vision-capable but no native PDF) ─────
   if (provider.pdfMode === 'image') {
-    // Convert PDFs to per-page PNG images
-    const progressCard = appendCard(`
-      <div class="bg-surface border border-subtle rounded-xl p-4">
-        <div class="flex items-center justify-between mb-2">
-          <div class="text-[13px] font-medium">📄 → 🖼️ 转换 PDF 为图片(多模态模型不直接支持 PDF)</div>
-          <div class="text-[11.5px] text-fg3" id="convProgress">0 / ${files.length}</div>
+    const pdfCount = binFiles.filter(f => f.category === 'pdf').length;
+    let progressCard = null, progEl = null, detEl = null;
+    if (pdfCount > 0) {
+      progressCard = appendCard(`
+        <div class="bg-surface border border-subtle rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-[13px] font-medium">📄 → 🖼️ 转换 PDF 为图片(多模态模型不直接支持 PDF)</div>
+            <div class="text-[11.5px] text-fg3" id="convProgress">0 / ${pdfCount}</div>
+          </div>
+          <div class="text-[11px] text-fg3" id="convDetail">准备中…</div>
         </div>
-        <div class="text-[11px] text-fg3" id="convDetail">准备中…</div>
-      </div>
-    `);
-    const progEl = progressCard.querySelector('#convProgress');
-    const detEl = progressCard.querySelector('#convDetail');
+      `);
+      progEl = progressCard.querySelector('#convProgress');
+      detEl = progressCard.querySelector('#convDetail');
+    }
 
-    const allImages = []; // { name, base64, page }
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i];
-      detEl.textContent = `${f.file.name}…`;
-      if (f.type === 'application/pdf') {
+    const allImages = [];
+    let pdfIdx = 0;
+    for (const f of binFiles) {
+      if (f.category === 'pdf') {
+        if (detEl) detEl.textContent = `${f.file.name}…`;
         try {
           const pageImages = await pdfToImages(f.file, 1.5);
           pageImages.forEach((b64, idx) => allImages.push({ name: f.file.name, base64: b64, page: idx + 1 }));
         } catch (e) {
-          detEl.textContent = `转换失败: ${e.message}`;
+          if (detEl) detEl.textContent = `转换失败: ${e.message}`;
           throw e;
         }
+        pdfIdx++;
+        if (progEl) progEl.textContent = `${pdfIdx} / ${pdfCount}`;
       } else {
         // Already an image
-        allImages.push({ name: f.file.name, base64: f.base64, page: 1, mediaType: f.type });
+        allImages.push({ name: f.file.name, base64: f.base64, mediaType: f.type, page: 1 });
       }
-      progEl.textContent = `${i + 1} / ${files.length}`;
     }
-    detEl.textContent = `✓ 完成,共 ${allImages.length} 张图片(${files.length} 个 PDF)`;
+    if (detEl) detEl.textContent = `✓ 完成,共 ${allImages.length} 张图片`;
 
     if (provider.format === 'anthropic') {
-      const content = [{ type: 'text', text: userText }];
-      allImages.forEach(img => {
-        content.push({
-          type: 'image',
-          source: { type: 'base64', media_type: img.mediaType || 'image/png', data: img.base64 },
-        });
-      });
+      const content = [{ type: 'text', text: enrichedUserText }];
+      allImages.forEach(img => content.push({
+        type: 'image',
+        source: { type: 'base64', media_type: img.mediaType || 'image/png', data: img.base64 },
+      }));
       return content;
     } else {
-      // OpenAI-compatible: text + array of image_url
-      const content = [{ type: 'text', text: userText }];
-      allImages.forEach(img => {
-        content.push({
-          type: 'image_url',
-          image_url: { url: `data:${img.mediaType || 'image/png'};base64,${img.base64}` },
-        });
-      });
+      const content = [{ type: 'text', text: enrichedUserText }];
+      allImages.forEach(img => content.push({
+        type: 'image_url',
+        image_url: { url: `data:${img.mediaType || 'image/png'};base64,${img.base64}` },
+      }));
       return content;
     }
   }
 
-  // pdfMode === 'text' — extract text from PDFs and inline
-  const progressCard = appendCard(`
-    <div class="bg-surface border border-subtle rounded-xl p-4">
-      <div class="flex items-center justify-between mb-2">
-        <div class="text-[13px] font-medium">📄 → 📝 提取 PDF 文本(此模型不支持图片)</div>
-        <div class="text-[11.5px] text-fg3" id="extProgress">0 / ${files.length}</div>
+  // ───── Text-only mode (DeepSeek / Moonshot etc.) ─────
+  const pdfCount = binFiles.filter(f => f.category === 'pdf').length;
+  const imgCount = binFiles.filter(f => f.category === 'image').length;
+  let progressCard = null, progEl = null;
+  if (pdfCount + imgCount > 0) {
+    progressCard = appendCard(`
+      <div class="bg-surface border border-subtle rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-[13px] font-medium">📄 → 📝 提取 PDF 文本(此模型不支持图片)</div>
+          <div class="text-[11.5px] text-fg3" id="extProgress">0 / ${pdfCount + imgCount}</div>
+        </div>
+        <div class="text-[11px] text-warn">⚠ 扫描件/HEIC 等会失败 — 建议换 Qwen VL / 豆包 Vision / Claude / GPT-4o</div>
       </div>
-      <div class="text-[11px] text-warn" id="extWarn">⚠ 仅适合「电子原版 PDF」(银行电子月结单)。扫描件/图片版会失败,建议改用 Qwen VL / 豆包 Vision / Claude / GPT-4o 等多模态模型。</div>
-    </div>
-  `);
-  const progEl = progressCard.querySelector('#extProgress');
+    `);
+    progEl = progressCard.querySelector('#extProgress');
+  }
 
   let combinedText = '';
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i];
-    if (f.type === 'application/pdf') {
+  let processed = 0;
+  for (const f of binFiles) {
+    if (f.category === 'pdf') {
       try {
         const text = await pdfToText(f.file);
-        combinedText += `\n\n========== ${f.file.name} ==========\n${text}`;
+        combinedText += `\n\n========== PDF: ${f.file.name} ==========\n${text}`;
       } catch (e) {
-        combinedText += `\n\n========== ${f.file.name} ==========\n[文本提取失败: ${e.message}]`;
+        combinedText += `\n\n========== PDF: ${f.file.name} ==========\n[文本提取失败: ${e.message}]`;
       }
     } else {
-      combinedText += `\n\n========== ${f.file.name} ==========\n[图片文件,纯文本模型无法处理]`;
+      // Image — try OCR fallback (lazy load Tesseract)
+      try {
+        const text = await ocrImageText(f.file);
+        combinedText += `\n\n========== 图片(OCR): ${f.file.name} ==========\n${text}`;
+      } catch (e) {
+        combinedText += `\n\n========== 图片: ${f.file.name} ==========\n[OCR 失败: ${e.message}]`;
+      }
     }
-    progEl.textContent = `${i + 1} / ${files.length}`;
+    processed++;
+    if (progEl) progEl.textContent = `${processed} / ${pdfCount + imgCount}`;
   }
 
-  if (provider.format === 'anthropic') {
-    return [{ type: 'text', text: userText + '\n\n[以下为各 PDF 提取的文本内容]\n' + combinedText }];
-  }
-  // OpenAI-compatible plain text
-  return userText + '\n\n[以下为各 PDF 提取的文本内容]\n' + combinedText;
+  const finalText = enrichedUserText + (combinedText ? '\n\n[以下为 PDF/图片提取的文本内容]\n' + combinedText : '');
+
+  if (provider.format === 'anthropic') return [{ type: 'text', text: finalText }];
+  return finalText;
 }
 
 // ─────────── Main flow ───────────
@@ -2176,9 +2434,30 @@ async function startAnalysis() {
   const company = document.getElementById('companyInput').value.trim() || 'Unnamed Company';
   const periodStart = document.getElementById('periodStart').value;
   const periodEnd = document.getElementById('periodEnd').value;
-  const fileList = stagedFiles.map(f => `  - ${f.file.name}`).join('\n');
+  // Group file list by category for clarity
+  const grouped = stagedFiles.reduce((acc, f) => {
+    const k = f.subcat || f.category;
+    (acc[k] ||= []).push(f);
+    return acc;
+  }, {});
+  const groupOrder = ['pdf', 'image', 'heic', 'excel', 'csv', 'docx', 'eml', 'sqlite', 'text'];
+  const fileList = groupOrder.filter(k => grouped[k]).map(k => {
+    const meta = TYPE_META[k] || TYPE_META.unknown;
+    const items = grouped[k].map(f => `    · ${f.origName || f.file.name}`).join('\n');
+    return `  ${meta.icon} ${meta.label}(${grouped[k].length} 份)\n${items}`;
+  }).join('\n');
 
-  const userText = `请严格按照系统提示词,分析以下香港银行月结单,
+  const hasNonPdf = stagedFiles.some(f => f.category === 'text' || (f.category === 'image' && f.subcat !== 'pdf'));
+  const crossValidationHint = hasNonPdf ? `
+
+【重要 · 多文件交叉验证】
+本次提交包含多种类型的文件(PDF 月结单 + 其他辅助资料)。请:
+- 把 Excel/CSV 账目表的应收账款 与 PDF 月结单的入账逐笔对比
+- 把 Word 合同 / 邮件中的金额 与 银行交易对账
+- 凡发现"账实不符"或"无源凭据"的项目,在审计轨迹明确标注
+- 报告里增加一段「外部资料交叉验证结果」,用 ✓ / ⚠ / ✗ 表示对得上 / 部分对 / 对不上` : '';
+
+  const userText = `请严格按照系统提示词,分析以下文件,
 计算 ${company} 在 ${periodStart} 至 ${periodEnd} 的有效净进账金额。
 
 【强制要求】
@@ -2187,17 +2466,11 @@ async function startAnalysis() {
 2. 严格计入:汇入汇款、支票存入、FPS、CHATS、e-Cheque、AR 回款、
    POS 商户结算、支付平台清算
 3. 汇率:优先 HKMA 中间价,精度 4 位小数,附 Annex I 汇率表
-4. 输出:6 大模块 + 4 张 Excel Sheet 的复制即用代码块(全部 \`\`\`tsv 包裹)
+4. 输出:严格按 4 段顺序(极简结论 / 可视化 / 数据 / 详细)
 5. 标注与 BIR51 / 管理层声明书 / FS Cash 余额的对接点
-
+${crossValidationHint}
 【文件清单(共 ${stagedFiles.length} 份)】
-${fileList}
-
-【输出要求】
-- 6 大模块以 Markdown 输出
-- 4 张 Excel Sheet 数据用 \`\`\`tsv 代码块附后(以制表符分隔,首行为列名)
-- 末尾给出 BIR51 / Management Rep Letter / 审计调整分录建议
-- 全部金额自验,误差 0.00`;
+${fileList}`;
 
   // Switch UI to chat mode early so user sees PDF conversion progress
   document.getElementById('emptyState').classList.add('hidden');
