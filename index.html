@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Cashlens · 现金透镜 · 香港审计流水分析</title>
 <meta name="description" content="香港 SME 银行月结单 AI 审计分析工具 · 支持 Anthropic / OpenAI / DeepSeek / 通义千问 / 豆包 / Kimi / 智谱 等多家 API · HKSA 230 / SME-FRS / IRO 合规" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
@@ -18,63 +19,180 @@ tailwind.config = {
   theme: {
     extend: {
       colors: {
-        base: '#0A0A0B', surface: '#141416', elevated: '#1C1C1F', input: '#0F0F11',
-        subtle: '#27272A', line: '#3F3F46',
-        fg1: '#FAFAFA', fg2: '#A1A1AA', fg3: '#71717A',
-        accent: '#8B5CF6', accent2: '#A78BFA',
-        ok: '#10B981', warn: '#F59E0B', err: '#EF4444',
+        // Glass-on-black system (motionai-inspired tokens, my own naming)
+        base: '#000000',           // pure black canvas
+        surface: 'hsl(240 4% 11%)',// inner card subtle
+        elevated: 'hsl(240 4% 18%)',// hover / popover
+        input: 'hsl(240 4% 8%)',
+        subtle: 'hsl(240 4% 24%)', // border-subtle
+        line: 'hsl(240 4% 38%)',   // glass-border
+        glass: 'hsl(240 4% 44%)',  // glass surface (40% opaque)
+        fg1: '#FFFFFF',
+        fg2: 'hsl(0 0% 78%)',
+        fg3: 'hsl(0 0% 60%)',
+        // Pastel AI accents
+        plum: 'hsl(270 60% 75%)',
+        lime: 'hsl(84 80% 88%)',
+        sky: 'hsl(200 80% 80%)',
+        rose: 'hsl(0 60% 80%)',
+        // Functional
+        ok: 'hsl(142 70% 70%)',
+        warn: 'hsl(38 90% 75%)',
+        err: 'hsl(0 75% 72%)',
+        // Backwards-compat aliases (so no other code change needed)
+        accent: 'hsl(270 60% 75%)',
+        accent2: 'hsl(270 60% 85%)',
       },
       fontFamily: {
-        sans: ['-apple-system', '"SF Pro Text"', 'Inter', '"PingFang SC"', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', '"SF Mono"', 'Consolas', 'monospace'],
+        serif: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
+        sans: ['Inter', '-apple-system', '"SF Pro Text"', '"PingFang SC"', 'system-ui', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', '"JetBrains Mono"', '"SF Mono"', 'Consolas', 'monospace'],
+      },
+      borderRadius: {
+        glass: '20px',
       }
     }
   }
 }
 </script>
 <style>
-  html { background: #0A0A0B; }
-  body { font-feature-settings: "cv02","cv03","cv04","cv11"; -webkit-font-smoothing: antialiased; }
+  html { background: #000; }
+  body {
+    background: #000;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, hsl(270 50% 30% / 0.18), transparent 70%),
+      radial-gradient(ellipse 60% 50% at 100% 80%, hsl(200 60% 30% / 0.12), transparent 70%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv02","cv03","cv04","cv11";
+  }
   .tabular { font-variant-numeric: tabular-nums; }
+
+  /* Glass surfaces — translucent + blur (motionai-style language) */
+  .glass-card {
+    background: hsl(240 4% 44% / 0.18);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    border: 1px solid hsl(240 4% 60% / 0.18);
+    border-radius: 20px;
+  }
+  .glass-card-subtle {
+    background: hsl(240 4% 11% / 0.7);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    border: 1px solid hsl(240 4% 38% / 0.4);
+    border-radius: 20px;
+  }
+  .glass-input {
+    background: hsl(240 4% 8% / 0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid hsl(240 4% 30%);
+    border-radius: 14px;
+  }
+  .glass-input:focus, .glass-input:focus-within {
+    border-color: hsl(0 0% 100% / 0.8);
+    background: hsl(240 4% 8% / 0.8);
+  }
+
+  /* Buttons — primary is white-on-dark (motionai language) */
+  .btn-prime {
+    background: #fff;
+    color: #1a1a1a;
+    border-radius: 14px;
+    font-weight: 500;
+    transition: transform 120ms ease, opacity 120ms ease;
+  }
+  .btn-prime:hover { opacity: 0.9; }
+  .btn-prime:active { transform: scale(0.98); }
+  .btn-prime:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-glass {
+    background: hsl(240 4% 44% / 0.25);
+    backdrop-filter: blur(12px);
+    border: 1px solid hsl(240 4% 60% / 0.18);
+    color: #fff;
+    border-radius: 14px;
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  .btn-glass:hover { background: hsl(240 4% 44% / 0.4); border-color: hsl(240 4% 70% / 0.4); }
+
+  /* Scrollbar */
   .scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
-  .scrollbar::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 4px; }
-  .scrollbar::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
-  .focus-glow:focus { box-shadow: 0 0 0 3px rgba(139,92,246,0.35); outline: none; }
-  @keyframes aiPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(.9)} }
+  .scrollbar::-webkit-scrollbar-thumb { background: hsl(240 4% 30% / 0.5); border-radius: 999px; }
+  .scrollbar::-webkit-scrollbar-thumb:hover { background: hsl(240 4% 50% / 0.6); }
+
+  .focus-glow:focus { box-shadow: 0 0 0 2px hsl(0 0% 100% / 0.4); outline: none; }
+
+  /* Animations */
+  @keyframes aiPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.55;transform:scale(.92)} }
   .ai-pulse { animation: aiPulse 1.6s ease-in-out infinite; }
   @keyframes blink { 50% { opacity: 0; } }
-  .caret::after { content: '▍'; margin-left: 1px; animation: blink 1s step-end infinite; color: #8B5CF6; }
+  .caret::after { content: '▍'; margin-left: 1px; animation: blink 1s step-end infinite; color: hsl(270 60% 75%); }
   @keyframes cardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
   .card-in { animation: cardIn 360ms cubic-bezier(0.2,0,0,1) both; }
-  .dropzone-active { border-color: #8B5CF6 !important; background: rgba(139,92,246,0.06); transform: scale(1.01); }
-  .accent-bg { background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%); }
-  .card { transition: transform 120ms cubic-bezier(0.2,0,0,1), border-color 120ms; }
-  .card:hover { transform: translateY(-1px); border-color: #3F3F46; }
-  .chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; font-size:11.5px; font-weight:500; }
   @keyframes dotJump { 0%,80%,100%{transform:translateY(0);opacity:.4} 40%{transform:translateY(-3px);opacity:1} }
   .dot { animation: dotJump 1.2s ease-in-out infinite; }
   .dot:nth-child(2) { animation-delay: 0.15s; }
   .dot:nth-child(3) { animation-delay: 0.3s; }
+
+  .dropzone-active {
+    border-color: #fff !important;
+    background: hsl(0 0% 100% / 0.04);
+    transform: scale(1.01);
+  }
+
+  /* Accent gradient (pastel) — used for AI avatar / chip highlights */
+  .accent-bg {
+    background: linear-gradient(135deg, hsl(270 60% 75%) 0%, hsl(200 80% 80%) 100%);
+    color: hsl(240 10% 15%);
+  }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 500;
+    background: hsl(240 4% 44% / 0.2);
+    backdrop-filter: blur(8px);
+    border: 1px solid hsl(240 4% 60% / 0.16);
+  }
+
+  .card { transition: transform 120ms ease, border-color 120ms ease; }
+  .card:hover { transform: translateY(-1px); }
+
   input[type=file] { display: none; }
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: hsl(0 0% 0% / 0.6);
+    z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
   details > summary { list-style: none; cursor: pointer; }
   details > summary::-webkit-details-marker { display: none; }
-  /* Markdown styles */
-  .md h1 { font-size: 17px; font-weight: 700; color: #FAFAFA; margin: 16px 0 10px; }
-  .md h2 { font-size: 15px; font-weight: 600; color: #FAFAFA; margin: 14px 0 8px; }
-  .md h3 { font-size: 14px; font-weight: 600; color: #FAFAFA; margin: 12px 0 6px; }
-  .md p { margin: 6px 0; line-height: 1.65; }
-  .md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+
+  /* Serif headlines */
+  h1.display, h2.display, .font-display {
+    font-family: "Instrument Serif", ui-serif, Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+
+  /* Markdown rendering — serif headings */
+  .md h1 { font-family: "Instrument Serif", ui-serif, serif; font-size: 24px; font-weight: 400; color: #fff; margin: 18px 0 10px; letter-spacing: -0.01em; }
+  .md h2 { font-family: "Instrument Serif", ui-serif, serif; font-size: 20px; font-weight: 400; color: #fff; margin: 16px 0 8px; letter-spacing: -0.01em; }
+  .md h3 { font-size: 14px; font-weight: 600; color: #fff; margin: 12px 0 6px; }
+  .md p { margin: 6px 0; line-height: 1.65; color: hsl(0 0% 88%); }
+  .md ul, .md ol { margin: 6px 0; padding-left: 22px; color: hsl(0 0% 88%); }
   .md li { margin: 3px 0; line-height: 1.6; }
-  .md code { background: #1C1C1F; padding: 1px 5px; border-radius: 4px; font-family: "JetBrains Mono", monospace; font-size: 12.5px; color: #A78BFA; }
-  .md pre { background: #0F0F11; border: 1px solid #27272A; border-radius: 8px; padding: 12px; overflow-x: auto; margin: 10px 0; }
-  .md pre code { background: transparent; padding: 0; color: #FAFAFA; font-size: 12px; }
-  .md table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
-  .md th { background: #1C1C1F; color: #A1A1AA; padding: 8px 10px; text-align: left; font-weight: 500; border: 1px solid #27272A; font-size: 12px; }
-  .md td { padding: 7px 10px; border: 1px solid #27272A; color: #FAFAFA; font-variant-numeric: tabular-nums; }
-  .md tr:hover td { background: rgba(139,92,246,0.04); }
-  .md strong { color: #FAFAFA; font-weight: 600; }
-  .md blockquote { border-left: 3px solid #8B5CF6; padding-left: 12px; color: #A1A1AA; margin: 10px 0; }
+  .md code { background: hsl(240 4% 18% / 0.6); padding: 1px 6px; border-radius: 6px; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: hsl(270 60% 85%); }
+  .md pre { background: hsl(240 4% 8% / 0.7); border: 1px solid hsl(240 4% 30%); border-radius: 14px; padding: 14px; overflow-x: auto; margin: 10px 0; }
+  .md pre code { background: transparent; padding: 0; color: #fff; font-size: 12px; }
+  .md table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; border-radius: 12px; overflow: hidden; }
+  .md th { background: hsl(240 4% 18% / 0.6); color: hsl(0 0% 70%); padding: 9px 12px; text-align: left; font-weight: 500; border-bottom: 1px solid hsl(240 4% 30%); font-size: 12px; }
+  .md td { padding: 8px 12px; border-bottom: 1px solid hsl(240 4% 18%); color: #fff; font-variant-numeric: tabular-nums; }
+  .md tr:hover td { background: hsl(0 0% 100% / 0.03); }
+  .md strong { color: #fff; font-weight: 600; }
+  .md blockquote { border-left: 2px solid hsl(270 60% 75%); padding-left: 14px; color: hsl(0 0% 70%); margin: 10px 0; font-style: italic; }
 </style>
 </head>
 <body class="bg-base text-fg1 font-sans h-screen overflow-hidden">
