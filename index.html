@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
 <script>
 if (typeof pdfjsLib !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -404,9 +405,11 @@ tailwind.config = {
     </div>
 
     <!-- Tabs (only shown when there's content) -->
-    <div id="artifactTabs" class="hidden border-b border-subtle px-3 py-2 flex gap-1">
+    <div id="artifactTabs" class="hidden border-b border-subtle px-3 py-2 flex gap-1 flex-wrap">
       <button onclick="switchArtifactTab('report')" data-tab="report"
               class="art-tab px-3 py-1 rounded-md text-[12px] font-medium bg-elevated text-fg1">📄 报告</button>
+      <button onclick="switchArtifactTab('charts')" data-tab="charts"
+              class="art-tab px-3 py-1 rounded-md text-[12px] font-medium text-fg2 hover:bg-elevated hover:text-fg1">📈 图表</button>
       <button onclick="switchArtifactTab('tables')" data-tab="tables"
               class="art-tab px-3 py-1 rounded-md text-[12px] font-medium text-fg2 hover:bg-elevated hover:text-fg1">📊 数据表</button>
       <button onclick="switchArtifactTab('citations')" data-tab="citations"
@@ -452,6 +455,7 @@ tailwind.config = {
     <!-- Report mode (filled when analysis runs) -->
     <div id="artifactReportMode" class="hidden flex-1 overflow-y-auto scrollbar">
       <div id="artifactReportTab" class="art-pane md p-5 text-[13.5px] text-fg1 leading-relaxed"></div>
+      <div id="artifactChartsTab" class="art-pane hidden p-5 space-y-5"></div>
       <div id="artifactTablesTab" class="art-pane hidden p-5 space-y-5"></div>
       <div id="artifactCitationsTab" class="art-pane hidden p-5 space-y-3"></div>
     </div>
@@ -775,7 +779,62 @@ receipts that contribute to revenue/turnover for tax purposes.
 5. PDF 缺失页/不可读 → 列入"数据质量"段落
 6. 金额三位一撇,港币 2 位小数,原币按银行精度
 7. 末尾追加 Audit Sign-off Block:日期、底稿编号、Prepared/Reviewed by
-8. 遵循 HKSA 230:经验丰富的审计师能在不接触执行人的情况下理解工作`;
+8. 遵循 HKSA 230:经验丰富的审计师能在不接触执行人的情况下理解工作
+
+[可视化与易懂性 — 必须严格执行]
+你的报告同时面向两类读者:
+  A. 审计专业人士(需结构化数据 + 审计轨迹)
+  B. 企业老板/财务(非专业,需快速看懂)
+
+因此【整个报告必须严格按 4 段顺序输出】,顺序不可调换 — 老板看上面 2 段就够了,审计师往下看后 2 段。
+
+═══ 第 1 段 · 极简核心结论 ═══(前置,严格控制 80 字内,不用 Markdown 标题)
+用最简单的大白话先说清楚 2-3 个核心发现。
+示例:"本期有效进账 HKD 284.7 万,主要来自 PING PONG GLOBAL 等 3 个客户,USD 占 92%。已排除 53 笔利息/手续费/出账。"
+
+═══ 第 2 段 · 可视化建议 ═══(必须给出 2-4 个图表,用 \`\`\`chart 代码块)
+每个图表用以下 JSON 格式输出(我们的前端会把它渲染成真图):
+\`\`\`chart
+{
+  "type": "bar | line | pie | doughnut | horizontal-bar | sankey | treemap | funnel",
+  "title": "图表标题",
+  "subtitle": "可选副标题",
+  "x_axis": "X 轴含义(柱图/折线必填)",
+  "y_axis": "Y 轴含义(柱图/折线必填,带单位)",
+  "data": [
+    { "label": "类目名", "value": 数值 },
+    { "label": "类目名", "value": 数值 }
+  ],
+  "color_scheme": "include | exclude | warn | rainbow | default",
+  "insight": "本图最关键的洞察(一句话)"
+}
+\`\`\`
+桑基图特殊格式:
+\`\`\`chart
+{ "type":"sankey","title":"...","data":{"nodes":[{"name":"客户A"}],"links":[{"source":"客户A","target":"USD账户","value":61798}]},"insight":"..." }
+\`\`\`
+
+优先推荐(根据数据情况选 2-4 个):
+  ① 月度有效进账趋势(柱状图)— 反映季节性
+  ② 币种占比(环形图)— 谁是主流水
+  ③ 排除原因占比(饼图)— 哪类交易被排除最多
+  ④ 主要付款方 Top10(横向柱状图)— 客户集中度
+  ⑤ 资金流向(桑基图)— 客户 → 公司账户的资金路径
+  ⑥ 月度入账 vs 排除对比(分组柱状图)— 净进账可视化
+
+颜色编码约定:
+  include = 绿色系  / exclude = 红色系  / warn = 橙色系  / rainbow = 多色 / default = 紫色
+
+═══ 第 3 段 · 结构化数据 ═══(用 \`\`\`tsv 代码块,4 张 Sheet 完整数据,与原 §4 一致)
+
+═══ 第 4 段 · 详细说明 ═══(把原来的 6 大模块完整放在最后)
+① 执行摘要(完整版,含汇率政策与数据质量)
+② 按月汇总文字解读
+③ 有效进账分类说明(按客户/类型分组叙述)
+④ 已排除项目分类说明 + 每类至少 2 笔示例
+⑤ 与 BIR51 / 管理层声明书 / FS Cash 余额的对接点
+⑥ 审计轨迹(每笔 borderline 详细判断)
+末尾追加 Audit Sign-off Block(日期、底稿编号、Prepared/Reviewed by)。`;
 
 // ─────────── Provider config ───────────
 // Each provider: format='anthropic' | 'openai' (compatible chat completions)
@@ -1492,9 +1551,188 @@ function switchArtifactTab(tab) {
   document.getElementById(`artifact${tab.charAt(0).toUpperCase() + tab.slice(1)}Tab`).classList.remove('hidden');
 }
 
+// ─────────── Chart rendering (ECharts) ───────────
+const __chartInstances = [];
+function buildChartOption(spec) {
+  const palette = {
+    include: ['#10B981', '#34D399', '#6EE7B7', '#A7F3D0'],
+    exclude: ['#EF4444', '#F87171', '#FCA5A5', '#FECACA'],
+    warn:    ['#F59E0B', '#FBBF24', '#FCD34D', '#FDE68A'],
+    rainbow: ['#A855F7', '#EC4899', '#F97316', '#FBBF24', '#10B981', '#3B82F6', '#8B5CF6'],
+    default: ['#A855F7', '#C084FC', '#E879F9', '#F472B6', '#FB923C'],
+  };
+  const colors = palette[spec.color_scheme] || palette.default;
+
+  const baseOption = {
+    title: {
+      text: spec.title || '',
+      subtext: spec.subtitle || '',
+      textStyle: { color: '#fafafa', fontSize: 14, fontWeight: 500, fontFamily: 'Inter' },
+      subtextStyle: { color: '#999', fontSize: 11 },
+      padding: [8, 16],
+    },
+    tooltip: {
+      backgroundColor: 'rgba(20,16,30,0.95)',
+      borderColor: 'rgba(168,85,247,0.4)',
+      textStyle: { color: '#fafafa', fontSize: 12 },
+      trigger: spec.type === 'pie' || spec.type === 'doughnut' ? 'item' : 'axis',
+    },
+    color: colors,
+    backgroundColor: 'transparent',
+    textStyle: { color: '#cfcfcf', fontFamily: 'Inter' },
+    grid: { top: 60, left: 60, right: 24, bottom: 50, containLabel: true },
+  };
+
+  const data = spec.data || [];
+
+  if (spec.type === 'pie' || spec.type === 'doughnut') {
+    return {
+      ...baseOption,
+      series: [{
+        type: 'pie',
+        radius: spec.type === 'doughnut' ? ['50%', '78%'] : ['0%', '78%'],
+        center: ['50%', '55%'],
+        data: data.map((d, i) => ({ name: d.label, value: d.value, itemStyle: { color: colors[i % colors.length] } })),
+        label: { color: '#fafafa', fontSize: 11 },
+        labelLine: { lineStyle: { color: '#666' } },
+      }],
+    };
+  }
+
+  if (spec.type === 'horizontal-bar') {
+    return {
+      ...baseOption,
+      grid: { ...baseOption.grid, left: 110 },
+      xAxis: { type: 'value', axisLine: { lineStyle: { color: '#444' } }, splitLine: { lineStyle: { color: '#222' } }, axisLabel: { color: '#999' }, name: spec.x_axis || '', nameTextStyle: { color: '#999' } },
+      yAxis: { type: 'category', data: data.map(d => d.label), axisLine: { lineStyle: { color: '#444' } }, axisLabel: { color: '#cfcfcf', fontSize: 11 }, inverse: true },
+      series: [{ type: 'bar', data: data.map((d,i) => ({ value: d.value, itemStyle: { color: colors[i % colors.length], borderRadius: [0, 4, 4, 0] } })), barWidth: '60%' }],
+    };
+  }
+
+  if (spec.type === 'line') {
+    return {
+      ...baseOption,
+      xAxis: { type: 'category', data: data.map(d => d.label), axisLine: { lineStyle: { color: '#444' } }, axisLabel: { color: '#cfcfcf' }, name: spec.x_axis || '', nameTextStyle: { color: '#999' } },
+      yAxis: { type: 'value', axisLine: { lineStyle: { color: '#444' } }, splitLine: { lineStyle: { color: '#222' } }, axisLabel: { color: '#999' }, name: spec.y_axis || '', nameTextStyle: { color: '#999' } },
+      series: [{ type: 'line', smooth: true, data: data.map(d => d.value), itemStyle: { color: colors[0] }, lineStyle: { color: colors[0], width: 2 }, areaStyle: { color: { type: 'linear', x:0,y:0,x2:0,y2:1, colorStops: [{offset:0, color: colors[0]+'66'}, {offset:1, color: colors[0]+'00'}]} } }],
+    };
+  }
+
+  if (spec.type === 'sankey') {
+    const sankeyData = spec.data || { nodes: [], links: [] };
+    return {
+      ...baseOption,
+      grid: undefined,
+      series: [{
+        type: 'sankey',
+        data: sankeyData.nodes,
+        links: sankeyData.links,
+        emphasis: { focus: 'adjacency' },
+        lineStyle: { color: 'gradient', curveness: 0.5, opacity: 0.5 },
+        itemStyle: { borderColor: '#A855F7', borderWidth: 1 },
+        label: { color: '#cfcfcf', fontSize: 11 },
+      }],
+    };
+  }
+
+  if (spec.type === 'treemap') {
+    return {
+      ...baseOption,
+      grid: undefined,
+      series: [{
+        type: 'treemap',
+        data: data.map((d,i) => ({ name: d.label, value: d.value, itemStyle: { color: colors[i % colors.length] } })),
+        label: { color: '#fff', fontSize: 12 },
+        breadcrumb: { show: false },
+      }],
+    };
+  }
+
+  if (spec.type === 'funnel') {
+    return {
+      ...baseOption,
+      series: [{
+        type: 'funnel',
+        data: data.map((d,i) => ({ name: d.label, value: d.value, itemStyle: { color: colors[i % colors.length] } })),
+        label: { color: '#fff', fontSize: 11 },
+        gap: 2,
+      }],
+    };
+  }
+
+  // Default: bar
+  return {
+    ...baseOption,
+    xAxis: { type: 'category', data: data.map(d => d.label), axisLine: { lineStyle: { color: '#444' } }, axisLabel: { color: '#cfcfcf', rotate: data.length > 6 ? 30 : 0 }, name: spec.x_axis || '', nameTextStyle: { color: '#999' } },
+    yAxis: { type: 'value', axisLine: { lineStyle: { color: '#444' } }, splitLine: { lineStyle: { color: '#222' } }, axisLabel: { color: '#999' }, name: spec.y_axis || '', nameTextStyle: { color: '#999' } },
+    series: [{ type: 'bar', data: data.map((d,i) => ({ value: d.value, itemStyle: { color: colors[i % colors.length], borderRadius: [4, 4, 0, 0] } })), barWidth: '55%' }],
+  };
+}
+
+function extractChartSpecs(text) {
+  const matches = [...text.matchAll(/```chart\s*\n([\s\S]*?)```/g)];
+  const specs = [];
+  for (const m of matches) {
+    try {
+      const obj = JSON.parse(m[1].trim());
+      specs.push(obj);
+    } catch (e) {
+      console.warn('chart parse failed', e);
+    }
+  }
+  return specs;
+}
+
+function renderChartCard(container, spec, idx) {
+  if (typeof echarts === 'undefined') {
+    container.innerHTML = '<div class="text-fg3 text-[12px]">⚠ ECharts 未加载</div>';
+    return;
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'surface-card overflow-hidden';
+  wrap.innerHTML = `
+    <div class="h-72" id="chart_${idx}"></div>
+    ${spec.insight ? `<div class="px-4 pb-3 text-[12px] text-fg2 border-t border-subtle pt-2"><span class="text-accent2 font-medium">💡</span> ${escapeHtml(spec.insight)}</div>` : ''}
+  `;
+  container.appendChild(wrap);
+  const inst = echarts.init(wrap.querySelector(`#chart_${idx}`), null, { renderer: 'canvas' });
+  try {
+    inst.setOption(buildChartOption(spec));
+    __chartInstances.push(inst);
+  } catch (e) {
+    console.warn('chart render failed', e);
+  }
+}
+
+window.addEventListener('resize', () => __chartInstances.forEach(c => c.resize()));
+
 function renderArtifactReport(text) {
+  // dispose old charts
+  __chartInstances.forEach(c => { try { c.dispose(); } catch {} });
+  __chartInstances.length = 0;
+
   const reportEl = document.getElementById('artifactReportTab');
   reportEl.innerHTML = renderMarkdown(text);
+
+  // Charts: render in dedicated tab
+  const chartSpecs = extractChartSpecs(text);
+  const chartsEl = document.getElementById('artifactChartsTab');
+  chartsEl.innerHTML = '';
+  if (chartSpecs.length === 0) {
+    chartsEl.innerHTML = '<div class="text-[12px] text-fg3">报告中未找到 ```chart 代码块。<br>提示词 v4.1 会让 AI 自动输出图表配置,如果没出现可能是模型版本较旧或 token 不够。</div>';
+  } else {
+    chartSpecs.forEach((spec, i) => renderChartCard(chartsEl, spec, i));
+    // Update tab badge
+    const tabBtn = document.querySelector('[data-tab="charts"]');
+    if (tabBtn && !tabBtn.querySelector('.chart-count')) {
+      const badge = document.createElement('span');
+      badge.className = 'chart-count ml-1 text-[10px] text-fg3';
+      badge.textContent = `(${chartSpecs.length})`;
+      tabBtn.appendChild(badge);
+    } else if (tabBtn) {
+      tabBtn.querySelector('.chart-count').textContent = `(${chartSpecs.length})`;
+    }
+  }
 
   // Tables tab: extract ```tsv blocks
   const tsvMatches = [...text.matchAll(/```tsv\s*\n([\s\S]*?)```/g)];
@@ -1664,6 +1902,15 @@ function renderMarkdown(md) {
   md = md.replace(/ INLINECODE(\d+) /g, (m, i) => `<code>${escapeHtml(inlineCodes[+i])}</code>`);
   md = md.replace(/ CODEBLOCK(\d+) /g, (m, i) => {
     const { lang, code } = codeBlocks[+i];
+    if (lang === 'chart') {
+      let title = '图表', insight = '';
+      try { const obj = JSON.parse(code.trim()); title = obj.title || title; insight = obj.insight || ''; } catch {}
+      return `<div class="my-3 surface-card p-4 flex items-center gap-3 hover:bg-elevated transition cursor-pointer" onclick="switchArtifactTab('charts')"><div class="w-10 h-10 rounded accent-bg flex items-center justify-center text-base">📈</div><div class="flex-1 min-w-0"><div class="text-[13px] font-medium text-fg1">${escapeHtml(title)}</div>${insight ? `<div class="text-[11.5px] text-fg3 mt-0.5 truncate">💡 ${escapeHtml(insight)}</div>` : ''}</div><span class="text-[11px] text-accent2">看图表 →</span></div>`;
+    }
+    if (lang === 'tsv') {
+      const lineCount = code.split('\n').filter(l => l.trim()).length;
+      return `<div class="my-3 surface-card p-3 text-[12px] text-fg2 cursor-pointer hover:bg-elevated transition" onclick="switchArtifactTab('tables')"><span class="text-accent2 font-mono">📊 TSV 数据</span> <span class="text-fg3 ml-2">${lineCount} 行 · 看「数据表」tab →</span></div>`;
+    }
     return `<pre><code class="lang-${lang}">${escapeHtml(code)}</code></pre>`;
   });
   return md;
