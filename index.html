@@ -195,6 +195,55 @@ tailwind.config = {
   details > summary { list-style: none; cursor: pointer; }
   details > summary::-webkit-details-marker { display: none; }
 
+  /* ─────── Interactive tour overlay ─────── */
+  .tour-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    pointer-events: auto;
+  }
+  .tour-spot {
+    position: absolute;
+    border-radius: 10px;
+    box-shadow:
+      0 0 0 4px hsl(327 98% 71% / 0.5),
+      0 0 0 9999px hsl(0 0% 0% / 0.78);
+    pointer-events: none;
+    transition: all 280ms cubic-bezier(0.2,0,0,1);
+  }
+  .tour-tip {
+    position: absolute;
+    width: 340px;
+    background: hsl(276 63% 7%);
+    border: 1px solid hsl(270 50% 35% / 0.5);
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: 0 16px 48px hsl(0 0% 0% / 0.6);
+    color: #fafafa;
+    transition: all 280ms cubic-bezier(0.2,0,0,1);
+  }
+  .tour-tip-arrow {
+    position: absolute;
+    width: 12px; height: 12px;
+    background: hsl(276 63% 7%);
+    border-left: 1px solid hsl(270 50% 35% / 0.5);
+    border-top: 1px solid hsl(270 50% 35% / 0.5);
+    transform: rotate(45deg);
+  }
+  .tour-progress {
+    display: flex; gap: 4px;
+    margin-bottom: 10px;
+  }
+  .tour-progress span {
+    flex: 1; height: 3px; border-radius: 2px;
+    background: hsl(0 0% 100% / 0.1);
+  }
+  .tour-progress span.active { background: hsl(327 98% 71%); }
+  .tour-progress span.done { background: hsl(270 60% 60%); }
+  @keyframes tourPulse {
+    0%, 100% { box-shadow: 0 0 0 4px hsl(327 98% 71% / 0.5), 0 0 0 9999px hsl(0 0% 0% / 0.78); }
+    50%      { box-shadow: 0 0 0 8px hsl(327 98% 71% / 0.35), 0 0 0 9999px hsl(0 0% 0% / 0.78); }
+  }
+  .tour-spot { animation: tourPulse 2s ease-in-out infinite; }
+
   /* Display headlines (Instrument Serif) */
   h1.display, h2.display, .font-display {
     font-family: "Instrument Serif", ui-serif, Georgia, serif;
@@ -249,6 +298,9 @@ tailwind.config = {
     <span>本次会话</span>
   </div>
 
+  <button onclick="startTour()" class="w-8 h-8 rounded-lg hover:bg-elevated flex items-center justify-center text-fg2 transition" title="功能教学">
+    <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M6 6c0-1.1.9-2 2-2s2 .9 2 2c0 .8-.5 1.4-1.2 1.7-.5.2-.8.6-.8 1.1V9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.5" r="0.5" fill="currentColor"/></svg>
+  </button>
   <button onclick="openSettings()" class="w-8 h-8 rounded-lg hover:bg-elevated flex items-center justify-center text-fg2 transition" title="设置">
     <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v2M8 13v2M15 8h-2M3 8H1M12.95 3.05l-1.4 1.4M4.45 11.55l-1.4 1.4M12.95 12.95l-1.4-1.4M4.45 4.45l-1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
   </button>
@@ -2842,18 +2894,269 @@ function startComposerHints() {
   }, 3500);
 }
 
+// ─────────── Interactive Tour ───────────
+const TOUR_STEPS = [
+  {
+    sel: null,
+    title: '🔮 欢迎使用 Cashlens',
+    body: '香港 SME 银行流水审计 AI 工具。3 分钟带你过一遍所有功能,之后随时点顶部 ❓ 重看。<br><br>● 客户给什么文件都能吃(PDF/图片/Excel/Word/HEIC/ZIP/邮件...)<br>● AI 自动出审计报告 + 图表 + 4 张 Excel Sheet<br>● 全前端,API Key 只存你浏览器,数据不上服务器',
+    pos: 'center',
+  },
+  {
+    sel: 'header > .flex.items-center.gap-2\\.5',
+    title: '产品定位',
+    body: 'Cashlens 是为香港中小企业和审计事务所做的「银行月结单 → 有效净进账」自动化工具。符合 HKSA 230 / SME-FRS / IRO Cap.112。',
+    pos: 'bottom',
+  },
+  {
+    sel: '#apiKeyDot',
+    title: '⚙️ 第 1 步:配置 API Key',
+    body: '点设置(齿轮图标),选服务商(国内推荐 DeepSeek/aipaibox/通义千问),粘贴 Key。<br><br>状态点变绿 = 已配置;黄 = 未配置。<br><br><span style="color:hsl(327 98% 71%)">支持 9 家服务商</span>:DeepSeek、通义千问、豆包、Kimi、智谱、aipaibox 中转、OpenRouter、OpenAI、Anthropic Claude。',
+    pos: 'top',
+  },
+  {
+    sel: '#dropzone',
+    title: '📤 第 2 步:拖文件进来',
+    body: '客户给什么都行 — 工具自动识别并解析:<br><br>📄 PDF 月结单<br>🖼️ JPG/PNG/HEIC 照片(iPhone 也行)<br>📊 Excel 账目表(自动转 TSV)<br>📝 Word 合同<br>🗂️ ZIP 自动展开<br>✉️ EML 邮件<br>🗄️ SQLite 数据库<br><br>多文件还会<span style="color:hsl(327 98% 71%)">自动交叉对账</span>(账实不符会标红)。',
+    pos: 'right',
+  },
+  {
+    sel: '#fileStaging, .max-w-2xl.w-full',
+    title: '📋 第 3 步:填公司信息 + 开始',
+    body: '上传后,在文件清单下方填:<br><br>• 公司全称<br>• 审计期间<br><br>然后点紫色「开始分析」按钮。<br><br>底部输入框就是<span style="color:hsl(327 98% 71%)">追问框</span>,等会儿会用到。',
+    pos: 'top',
+  },
+  {
+    sel: '#artifactPanel',
+    title: '📄 右侧报告面板(像 Claude artifacts)',
+    body: 'AI 流式输出的完整报告会出现在右侧面板,4 个 tab:<br><br>📄 <b>报告</b> — 完整 Markdown(老板看上面 80 字结论就够了)<br>📈 <b>图表</b> — AI 自己出的 2-4 张图(柱/饼/桑基/...)<br>📊 <b>数据表</b> — 4 张 Excel Sheet,粘到模版即用<br>📜 <b>引用</b> — 报告里所有 IRO/DIPN/SME-FRS 条款<br><br>顶部 ↔ 按钮可以展开/收起面板宽度。',
+    pos: 'left',
+  },
+  {
+    sel: '#composer, [id="composerInput"]',
+    title: '💬 第 4 步:无限追问',
+    body: '报告完成后<span style="color:hsl(327 98% 71%)">不是终点</span>!底部输入框可以一直追问:<br><br>• "列出所有大额交易"<br>• "为什么排除了那笔利息?"<br>• "按 BIR51 格式重新输出"<br>• "生成给客户的中文摘要邮件"<br><br>报告完成后还会自动出现追问芯片,点一下自动发送。',
+    pos: 'top',
+  },
+  {
+    sel: '#exportBtn',
+    title: '📥 第 5 步:导出',
+    body: '右上角紫色「导出」按钮 = 下载完整 Markdown 报告。<br><br>报告完成后,左侧聊天区还会显示:<br>• 📋 复制全文<br>• 📥 下载 .md<br>• 📊 复制全部 TSV(粘到 Excel 模版)<br><br>右侧 artifact 底部工具栏也有同样按钮。',
+    pos: 'bottom',
+  },
+  {
+    sel: '#projectList',
+    title: '🕒 历史项目',
+    body: '每次分析自动存到本机(localStorage,最近 30 个)。点 sidebar 的项目可<span style="color:hsl(327 98% 71%)">秒开历史报告</span>,不用重跑 AI。<br><br>可以基于历史项目继续追问,等于把每个客户的审计案卷都留在你工具里。',
+    pos: 'right',
+  },
+  {
+    sel: null,
+    title: '✅ 教程结束',
+    body: '搞定了!<br><br>● 顶部 <b>❓</b> 按钮随时重看本教程<br>● 顶部 <b>⚙️</b> 按钮改 API Key / 模型 / 提示词<br>● 数据 100% 本机,关网页就清,共用电脑记得清 localStorage<br><br>有问题直接拖文件试试,先跑一份就熟了。',
+    pos: 'center',
+  },
+];
+
+let __tourIdx = 0;
+const TOUR_KEY = 'cashlens_tour_done_v1';
+
+function startTour() {
+  __tourIdx = 0;
+  // Make sure no other modal is open
+  document.getElementById('settingsModal')?.classList.add('hidden');
+  document.getElementById('aboutModal')?.classList.add('hidden');
+  showTourStep();
+}
+
+function showTourStep() {
+  const step = TOUR_STEPS[__tourIdx];
+  if (!step) { endTour(); return; }
+
+  // Build/get overlay
+  let overlay = document.getElementById('tourOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'tourOverlay';
+    overlay.className = 'tour-overlay';
+    overlay.innerHTML = `
+      <div class="tour-spot" id="tourSpot"></div>
+      <div class="tour-tip" id="tourTip">
+        <div class="tour-tip-arrow" id="tourArrow"></div>
+        <div class="tour-progress" id="tourProgress"></div>
+        <div class="text-[15px] font-semibold mb-1.5" id="tourTitle"></div>
+        <div class="text-[13px] text-fg2 leading-relaxed" id="tourBody"></div>
+        <div class="flex items-center justify-between mt-4 pt-3 border-t border-subtle">
+          <button onclick="endTour()" class="text-[12px] text-fg3 hover:text-fg1">跳过</button>
+          <div class="flex gap-1.5">
+            <button id="tourPrev" onclick="prevTour()" class="text-[12px] px-3 py-1.5 rounded-md bg-elevated border border-subtle hover:border-line text-fg1">← 上一步</button>
+            <button id="tourNext" onclick="nextTour()" class="text-[12px] px-3 py-1.5 rounded-md text-white" style="background: linear-gradient(90deg, hsl(262 93% 69%), hsl(327 98% 71%) 50%, hsl(21 100% 70%));">下一步 →</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) endTour(); // click on dim background = skip
+    });
+  }
+
+  const spot = overlay.querySelector('#tourSpot');
+  const tip = overlay.querySelector('#tourTip');
+  const arrow = overlay.querySelector('#tourArrow');
+  const titleEl = overlay.querySelector('#tourTitle');
+  const bodyEl = overlay.querySelector('#tourBody');
+  const progEl = overlay.querySelector('#tourProgress');
+  const prevBtn = overlay.querySelector('#tourPrev');
+  const nextBtn = overlay.querySelector('#tourNext');
+
+  // Progress bars
+  progEl.innerHTML = TOUR_STEPS.map((_, i) => {
+    if (i < __tourIdx) return '<span class="done"></span>';
+    if (i === __tourIdx) return '<span class="active"></span>';
+    return '<span></span>';
+  }).join('');
+
+  titleEl.innerHTML = step.title;
+  bodyEl.innerHTML = step.body;
+  prevBtn.style.visibility = __tourIdx === 0 ? 'hidden' : 'visible';
+  nextBtn.textContent = (__tourIdx === TOUR_STEPS.length - 1) ? '完成 ✓' : '下一步 →';
+
+  // Position spotlight + tooltip
+  if (!step.sel || step.pos === 'center') {
+    spot.style.display = 'none';
+    arrow.style.display = 'none';
+    tip.style.left = '50%';
+    tip.style.top = '50%';
+    tip.style.transform = 'translate(-50%, -50%)';
+  } else {
+    let target = null;
+    // Try comma-separated selectors, find first visible
+    for (const sel of step.sel.split(',').map(s => s.trim())) {
+      try {
+        target = document.querySelector(sel);
+        if (target && target.offsetParent !== null) break;
+        target = null;
+      } catch {}
+    }
+    if (!target) {
+      // selector missing — center fallback
+      spot.style.display = 'none';
+      arrow.style.display = 'none';
+      tip.style.left = '50%'; tip.style.top = '50%'; tip.style.transform = 'translate(-50%, -50%)';
+    } else {
+      target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const r = target.getBoundingClientRect();
+      const pad = 6;
+      spot.style.display = 'block';
+      spot.style.left = (r.left - pad) + 'px';
+      spot.style.top = (r.top - pad) + 'px';
+      spot.style.width = (r.width + pad * 2) + 'px';
+      spot.style.height = (r.height + pad * 2) + 'px';
+
+      // Position tooltip
+      const tipW = 340, tipH = tip.offsetHeight || 280;
+      const margin = 16;
+      let tx, ty, ax = '50%', ay = '0';
+      const pos = step.pos || 'auto';
+      const space = {
+        top: r.top, bottom: window.innerHeight - r.bottom,
+        left: r.left, right: window.innerWidth - r.right,
+      };
+      let chosen = pos;
+      if (pos === 'auto' || pos === 'right' && space.right < tipW + margin) {
+        chosen = space.bottom > tipH + margin ? 'bottom' :
+                 space.top > tipH + margin ? 'top' :
+                 space.right > tipW + margin ? 'right' : 'left';
+      }
+      switch (chosen) {
+        case 'top':
+          tx = Math.max(margin, Math.min(window.innerWidth - tipW - margin, r.left + r.width / 2 - tipW / 2));
+          ty = r.top - tipH - margin;
+          ax = (r.left + r.width / 2 - tx - 6) + 'px';
+          ay = (tipH - 6) + 'px';
+          arrow.style.transform = 'rotate(225deg)';
+          break;
+        case 'bottom':
+          tx = Math.max(margin, Math.min(window.innerWidth - tipW - margin, r.left + r.width / 2 - tipW / 2));
+          ty = r.bottom + margin;
+          ax = (r.left + r.width / 2 - tx - 6) + 'px';
+          ay = '-6px';
+          arrow.style.transform = 'rotate(45deg)';
+          break;
+        case 'left':
+          tx = r.left - tipW - margin;
+          ty = Math.max(margin, r.top + r.height / 2 - tipH / 2);
+          ax = (tipW - 6) + 'px';
+          ay = (r.top + r.height / 2 - ty - 6) + 'px';
+          arrow.style.transform = 'rotate(135deg)';
+          break;
+        case 'right':
+        default:
+          tx = r.right + margin;
+          ty = Math.max(margin, r.top + r.height / 2 - tipH / 2);
+          ax = '-6px';
+          ay = (r.top + r.height / 2 - ty - 6) + 'px';
+          arrow.style.transform = 'rotate(-45deg)';
+          break;
+      }
+      tip.style.transform = '';
+      tip.style.left = tx + 'px';
+      tip.style.top = ty + 'px';
+      arrow.style.display = 'block';
+      arrow.style.left = ax;
+      arrow.style.top = ay;
+    }
+  }
+}
+
+function nextTour() {
+  if (__tourIdx >= TOUR_STEPS.length - 1) { endTour(); return; }
+  __tourIdx++;
+  showTourStep();
+}
+function prevTour() {
+  if (__tourIdx <= 0) return;
+  __tourIdx--;
+  showTourStep();
+}
+function endTour() {
+  document.getElementById('tourOverlay')?.remove();
+  localStorage.setItem(TOUR_KEY, '1');
+}
+
+// Keyboard shortcuts during tour
+document.addEventListener('keydown', (e) => {
+  if (!document.getElementById('tourOverlay')) return;
+  if (e.key === 'Escape') { endTour(); }
+  if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); nextTour(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); prevTour(); }
+});
+window.addEventListener('resize', () => {
+  if (document.getElementById('tourOverlay')) showTourStep();
+});
+
 // ─────────── Init ───────────
 window.addEventListener('DOMContentLoaded', () => {
   updateApiKeyDot();
   updateModelLabel();
   renderProjectList();
   startComposerHints();
-  // First-time visit → open settings
-  if (!getApiKey()) {
+
+  const hasKey = !!getApiKey();
+  const tourSeen = !!localStorage.getItem(TOUR_KEY);
+
+  // First-time visit, no key → open settings (existing behavior)
+  if (!hasKey) {
     setTimeout(() => {
       toast('首次使用,请先配置 API Key', 'info');
       openSettings();
     }, 400);
+    return;
+  }
+
+  // Has key, never seen tour → auto-launch tour
+  if (hasKey && !tourSeen) {
+    setTimeout(() => startTour(), 600);
   }
 });
 </script>
