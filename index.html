@@ -2258,7 +2258,7 @@ ${fileList}
       }
       // Render full Markdown in artifact + populate tables/citations tabs
       renderArtifactReport(fullText);
-      // Replace chat status with completion summary
+      // Replace chat status with completion summary + follow-up suggestion chips
       const statusEl = document.getElementById('streamStatus');
       if (statusEl) {
         statusEl.id = '';
@@ -2266,10 +2266,23 @@ ${fileList}
           <div class="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-[12px] bg-ok text-white">✓</div>
           <div class="flex-1 pt-0.5">
             <div class="text-[13px] text-fg1 mb-1">报告完成 · 共 ${fullText.length.toLocaleString()} 字符</div>
-            <div class="flex gap-2 mt-2">
+            <div class="flex flex-wrap gap-2 mt-2">
               <button onclick="expandArtifactWide()" class="text-[11px] px-2.5 py-1 rounded bg-elevated border border-subtle hover:border-line text-fg1">📄 查看完整报告 →</button>
               <button onclick="downloadArtifactMd()" class="text-[11px] px-2.5 py-1 rounded bg-elevated border border-subtle hover:border-line text-fg2 hover:text-fg1">📥 下载 .md</button>
               <button onclick="copyArtifactTsv()" class="text-[11px] px-2.5 py-1 rounded bg-elevated border border-subtle hover:border-line text-fg2 hover:text-fg1">📊 复制 TSV</button>
+            </div>
+            <div class="mt-3 pt-3 border-t border-subtle">
+              <div class="text-[11px] text-fg3 mb-1.5">💬 继续追问(点一下自动发送):</div>
+              <div class="flex flex-wrap gap-1.5">
+                ${[
+                  '列出所有大额交易(>50 万 HKD)',
+                  '只看 USD 账户,按客户分组汇总',
+                  '为什么排除了那笔利息?',
+                  '生成给客户的中文摘要邮件',
+                  '按 BIR51 格式重新输出',
+                  '5 月份所有 PING PONG 的交易',
+                ].map(q => `<button onclick="askFollowupSuggestion(${JSON.stringify(q).replace(/"/g, '&quot;')})" class="text-[11px] px-2.5 py-1 rounded-full bg-base border border-subtle hover:border-accent2 text-fg2 hover:text-fg1 transition">${q}</button>`).join('')}
+              </div>
             </div>
           </div>`;
       }
@@ -2301,6 +2314,15 @@ ${fileList}
       toast(err.split('\n')[0], 'err');
     },
   });
+}
+
+// Fill composer with a suggested question and auto-send
+function askFollowupSuggestion(text) {
+  const input = document.getElementById('composerInput');
+  input.value = text;
+  // brief flash so user sees what was inserted
+  input.focus();
+  sendFollowup();
 }
 
 async function sendFollowup() {
@@ -2524,11 +2546,35 @@ document.getElementById('composerInput').addEventListener('input', (e) => {
   e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
 });
 
+// Rotate composer placeholder when empty (gives user prompt ideas)
+function startComposerHints() {
+  const hints = [
+    '列出所有大额交易(>50 万 HKD)',
+    '只看 USD 账户,按客户分组',
+    '为什么排除了那笔利息?',
+    '生成给客户的中文摘要邮件',
+    '按 BIR51 格式重新输出',
+    '5 月份所有 PING PONG 的交易',
+    '哪些交易是关联方付款?',
+    '生成审计调整分录建议',
+  ];
+  let i = 0;
+  const inp = document.getElementById('composerInput');
+  if (!inp) return;
+  setInterval(() => {
+    if (document.activeElement === inp) return;
+    if (inp.value.trim()) return;
+    inp.placeholder = `问问关于这份流水的任何事 …  例:${hints[i % hints.length]}`;
+    i++;
+  }, 3500);
+}
+
 // ─────────── Init ───────────
 window.addEventListener('DOMContentLoaded', () => {
   updateApiKeyDot();
   updateModelLabel();
   renderProjectList();
+  startComposerHints();
   // First-time visit → open settings
   if (!getApiKey()) {
     setTimeout(() => {
