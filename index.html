@@ -290,12 +290,43 @@ tailwind.config = {
   .md tr:hover td { background: hsl(270 50% 20% / 0.15); }
   .md strong { color: #fff; font-weight: 600; }
   .md blockquote { border-left: 2px solid hsl(327 98% 71%); padding-left: 14px; color: hsl(0 0% 70%); margin: 10px 0; font-style: italic; }
+
+  /* ─── Responsive: panels open as overlays on narrow screens ─── */
+  @media (max-width: 1023px) {
+    #sidebarPanel.show-mobile {
+      display: flex !important;
+      position: fixed; left: 0; top: 56px; bottom: 0; z-index: 60;
+      box-shadow: 4px 0 32px rgba(0,0,0,0.6);
+      animation: slideInLeft 250ms ease-out;
+    }
+  }
+  @media (max-width: 1279px) {
+    #artifactPanel.show-mobile {
+      display: flex !important;
+      position: fixed; right: 0; top: 56px; bottom: 0; z-index: 60;
+      box-shadow: -4px 0 32px rgba(0,0,0,0.6);
+      width: min(420px, 92vw) !important;
+      animation: slideInRight 250ms ease-out;
+    }
+  }
+  @keyframes slideInLeft  { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+  @keyframes slideInRight { from { transform: translateX(100%);  } to { transform: translateX(0); } }
+  .panel-backdrop {
+    position: fixed; inset: 56px 0 0 0; background: rgba(0,0,0,0.6);
+    z-index: 55; backdrop-filter: blur(2px);
+    animation: fadeIn 200ms ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 </style>
 </head>
 <body class="bg-base text-fg1 font-sans h-screen overflow-hidden">
 
 <!-- ═════════════ TopBar ═════════════ -->
-<header class="h-14 border-b border-subtle flex items-center px-5 gap-4">
+<header class="h-14 border-b border-subtle flex items-center px-3 md:px-5 gap-2 md:gap-4">
+  <!-- Hamburger menu for small screens -->
+  <button onclick="toggleSidebar()" class="lg:hidden w-8 h-8 rounded-lg hover:bg-elevated flex items-center justify-center text-fg2" title="菜单">
+    <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+  </button>
   <div class="flex items-center gap-2.5 mr-2">
     <div class="w-7 h-7 rounded-lg accent-bg flex items-center justify-center text-white text-sm">🔮</div>
     <div>
@@ -327,6 +358,9 @@ tailwind.config = {
     <span>本次会话</span>
   </div>
 
+  <button onclick="toggleArtifactPanel()" class="xl:hidden w-8 h-8 rounded-lg hover:bg-elevated flex items-center justify-center text-fg2 transition" title="侧边面板">
+    <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.4"/></svg>
+  </button>
   <button onclick="startTour()" class="w-8 h-8 rounded-lg hover:bg-elevated flex items-center justify-center text-fg2 transition" title="功能教学">
     <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M6 6c0-1.1.9-2 2-2s2 .9 2 2c0 .8-.5 1.4-1.2 1.7-.5.2-.8.6-.8 1.1V9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.5" r="0.5" fill="currentColor"/></svg>
   </button>
@@ -344,7 +378,7 @@ tailwind.config = {
 <div class="flex h-[calc(100vh-56px)]">
 
   <!-- Sidebar -->
-  <aside class="w-64 border-r border-subtle flex flex-col bg-base">
+  <aside id="sidebarPanel" class="w-64 border-r border-subtle hidden lg:flex flex-col bg-base">
     <div class="p-3">
       <button onclick="newSession()" class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-subtle hover:border-line hover:bg-elevated text-sm font-medium transition">
         <svg class="w-4 h-4 text-accent2" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -478,7 +512,7 @@ tailwind.config = {
   </main>
 
   <!-- ─── Right Artifact Panel(像 Claude 的 artifact 一样)─── -->
-  <aside id="artifactPanel" class="border-l border-subtle bg-base flex flex-col transition-all duration-300"
+  <aside id="artifactPanel" class="border-l border-subtle bg-base hidden xl:flex flex-col transition-all duration-300"
          style="width: 320px;">
     <!-- Header bar -->
     <div class="px-4 py-3 border-b border-subtle flex items-center justify-between gap-2">
@@ -1889,10 +1923,46 @@ function closeArtifact() {
 
 function expandArtifactWide() {
   const panel = document.getElementById('artifactPanel');
-  // 50% of viewport, min 480px, max 900px
-  const w = Math.min(900, Math.max(480, Math.floor(window.innerWidth * 0.45)));
+  // On narrow screens (<1280px), open as full-screen overlay instead of side panel
+  if (window.innerWidth < 1280) {
+    showArtifactPanel();
+    return;
+  }
+  // 50% of viewport, clamped: min 480, max 900, never more than viewport - 280 (sidebar + main minimum)
+  const cap = Math.max(360, window.innerWidth - 280 - 256);
+  const w = Math.min(900, cap, Math.max(480, Math.floor(window.innerWidth * 0.45)));
   panel.style.width = w + 'px';
   __artifactExpanded = true;
+}
+
+// ─────────── Mobile / narrow-screen panel toggles ───────────
+function toggleSidebar() {
+  const sb = document.getElementById('sidebarPanel');
+  const wasOpen = sb.classList.contains('show-mobile');
+  sb.classList.toggle('show-mobile');
+  if (!wasOpen) showBackdrop(() => sb.classList.remove('show-mobile'));
+  else hideBackdrop();
+}
+function showArtifactPanel() {
+  const ap = document.getElementById('artifactPanel');
+  ap.classList.add('show-mobile');
+  showBackdrop(() => ap.classList.remove('show-mobile'));
+}
+function toggleArtifactPanel() {
+  const ap = document.getElementById('artifactPanel');
+  if (ap.classList.contains('show-mobile')) { ap.classList.remove('show-mobile'); hideBackdrop(); }
+  else showArtifactPanel();
+}
+function showBackdrop(onClick) {
+  hideBackdrop();
+  const bd = document.createElement('div');
+  bd.id = 'panelBackdrop';
+  bd.className = 'panel-backdrop';
+  bd.onclick = () => { hideBackdrop(); if (onClick) onClick(); };
+  document.body.appendChild(bd);
+}
+function hideBackdrop() {
+  document.getElementById('panelBackdrop')?.remove();
 }
 
 function toggleArtifactWidth() {
