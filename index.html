@@ -802,8 +802,8 @@ tailwind.config = {
         <div class="text-fg1 font-semibold mb-1">数据安全</div>
         <ul class="list-disc pl-5 space-y-1">
           <li>全部前端运行,无后端服务器</li>
-          <li>API Key 加密存于浏览器 localStorage</li>
-          <li>PDF 仅在你浏览器内 base64,直接通过 HTTPS 发往 api.anthropic.com</li>
+          <li>API Key 仅保存在本机浏览器 localStorage(无后端中转)</li>
+          <li>上传文件仅在浏览器内读取,直接通过 HTTPS 发往你选择的模型服务商</li>
           <li>关闭网页 = 数据自动清除(localStorage 除外)</li>
         </ul>
       </div>
@@ -1147,10 +1147,13 @@ function getProvider() {
 }
 function getProviderConfig() {
   const s = loadSettings();
-  const p = PROVIDERS[getProvider()];
-  // Custom and oneapi types use user-supplied baseUrl
-  if ((s.provider === 'custom' || s.provider === 'oneapi') && s.customBaseUrl) {
-    return { ...p, baseUrl: s.customBaseUrl };
+  const providerKey = getProvider();
+  const p = PROVIDERS[providerKey] || PROVIDERS[DEFAULTS.provider];
+  // Custom and oneapi types use user-supplied baseUrl. Preserve an empty
+  // baseUrl so streamAI can stop with a friendly validation error instead of
+  // accidentally POSTing to this static page's /chat/completions path.
+  if (providerKey === 'custom' || providerKey === 'oneapi') {
+    return { ...p, baseUrl: normalizeBaseUrl(s.customBaseUrl || '') || '' };
   }
   return p;
 }
@@ -1232,11 +1235,12 @@ function rebuildModelSelect(providerKey, currentModelId) {
 // ─────────── Settings Modal ───────────
 function openSettings() {
   const s = loadSettings();
-  const provider = s.provider || 'deepseek';
+  const provider = s.provider || DEFAULTS.provider;
   document.getElementById('providerSelect').value = provider;
   document.getElementById('customBaseUrl').value = s.customBaseUrl || '';
   document.getElementById('apiKeyInput').value = s.apiKey || '';
-  rebuildModelSelect(provider, s.customModel || s.model);
+  const selectedModel = s.customModel || s.model || (!s.provider ? DEFAULTS.model : null);
+  rebuildModelSelect(provider, selectedModel);
   if (s.customModel) {
     document.getElementById('modelSelect').value = 'custom';
     document.getElementById('customModel').classList.remove('hidden');
@@ -2385,6 +2389,10 @@ function renderMarkdown(md) {
     return ` INLINECODE${inlineCodes.length - 1} `;
   });
 
+  // Escape all non-code Markdown text before turning it into HTML. This keeps
+  // model output like <img onerror=...> visible as text instead of executable DOM.
+  md = escapeHtml(md);
+
   // Headings
   md = md.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
   md = md.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
@@ -2424,7 +2432,7 @@ function renderMarkdown(md) {
   });
 
   // Blockquotes
-  md = md.replace(/^> (.*?)$/gm, '<blockquote>$1</blockquote>');
+  md = md.replace(/^&gt; (.*?)$/gm, '<blockquote>$1</blockquote>');
 
   // Paragraphs (split by double newline)
   md = md.split(/\n\n+/).map(p => {
@@ -2460,6 +2468,10 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
   const thinking = getThinking();
   const maxTokens = getMaxTokens();
   const provider = getProviderConfig();
+  if (!provider?.baseUrl) {
+    onError('请先在设置中填写 Base URL(例如 https://your-endpoint/v1)');
+    return;
+  }
 
   let response;
   try {
@@ -2729,7 +2741,7 @@ async function buildUserContent(userText, files, provider) {
 // ─────────── Main flow ───────────
 async function startAnalysis() {
   if (stagedFiles.length === 0) {
-    toast('请先添加 PDF 文件', 'warn');
+    toast('请先添加要分析的文件', 'warn');
     return;
   }
   if (!getApiKey()) {
@@ -2741,6 +2753,14 @@ async function startAnalysis() {
   const company = document.getElementById('companyInput').value.trim() || 'Unnamed Company';
   const periodStart = document.getElementById('periodStart').value;
   const periodEnd = document.getElementById('periodEnd').value;
+  if (!periodStart || !periodEnd) {
+    toast('请先填写完整审计期间', 'warn');
+    return;
+  }
+  if (periodStart > periodEnd) {
+    toast('审计期间开始日期不能晚于结束日期', 'warn');
+    return;
+  }
   // Group file list by category for clarity
   const grouped = stagedFiles.reduce((acc, f) => {
     const k = f.subcat || f.category;
@@ -2754,12 +2774,13 @@ async function startAnalysis() {
     return `  ${meta.icon} ${meta.label}(${grouped[k].length} 份)\n${items}`;
   }).join('\n');
 
-  const hasNonPdf = stagedFiles.some(f => f.category === 'text' || (f.category === 'image' && f.subcat !== 'pdf'));
-  const crossValidationHint = hasNonPdf ? `
+  const hasPdf = stagedFiles.some(f => f.category === 'pdf' || f.subcat === 'pdf');
+  const hasAux = stagedFiles.some(f => !(f.category === 'pdf' || f.subcat === 'pdf'));
+  const crossValidationHint = (hasPdf && hasAux) ? `
 
 【重要 · 多文件交叉验证】
-本次提交包含多种类型的文件(PDF 月结单 + 其他辅助资料)。请:
-- 把 Excel/CSV 账目表的应收账款 与 PDF 月结单的入账逐笔对比
+本次提交同时包含银行月结单和其他辅助资料。请:
+- 把 Excel/CSV 账目表的应收账款 与银行月结单的入账逐笔对比
 - 把 Word 合同 / 邮件中的金额 与 银行交易对账
 - 凡发现"账实不符"或"无源凭据"的项目,在审计轨迹明确标注
 - 报告里增加一段「外部资料交叉验证结果」,用 ✓ / ⚠ / ✗ 表示对得上 / 部分对 / 对不上` : '';
@@ -2786,7 +2807,7 @@ ${fileList}`;
   document.getElementById('fileStaging').classList.add('hidden');
   document.getElementById('composer').classList.remove('hidden');
   __cardSeq = 0;
-  appendUserBubble(`分析 ${company} · ${periodStart} ~ ${periodEnd} · ${stagedFiles.length} 份月结单`);
+  appendUserBubble(`分析 ${company} · ${periodStart} ~ ${periodEnd} · ${stagedFiles.length} 份文件`);
 
   // Build user content per provider's PDF mode
   const provider = getProviderConfig();
@@ -3098,7 +3119,7 @@ function loadProject(id) {
   document.getElementById('emptyState').classList.add('hidden');
   document.getElementById('composer').classList.remove('hidden');
   __cardSeq = 0;
-  appendUserBubble(`${p.company} · ${p.periodStart} ~ ${p.periodEnd} · ${p.files.length} 份月结单(历史)`);
+  appendUserBubble(`${p.company} · ${p.periodStart} ~ ${p.periodEnd} · ${p.files.length} 份文件(历史)`);
   appendCard(`
     <div class="flex gap-3">
       <div class="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-[12px] bg-ok text-white">✓</div>
@@ -3124,6 +3145,13 @@ function newSession() {
   document.getElementById('emptyState').classList.remove('hidden');
   document.getElementById('composer').classList.add('hidden');
   document.getElementById('exportBtn').disabled = true;
+  window.__latestReport = '';
+  ['artifactReportTab','artifactChartsTab','artifactTablesTab','artifactCitationsTab'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
+  document.getElementById('artifactStatus').textContent = '等待分析';
+  document.querySelectorAll('.chart-count').forEach(el => el.remove());
   // Reset artifact panel to info mode
   document.getElementById('artifactReportMode').classList.add('hidden');
   document.getElementById('artifactInfoMode').classList.remove('hidden');
