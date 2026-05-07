@@ -358,13 +358,20 @@ tailwind.config = {
           <h2 class="text-xl font-semibold text-fg1 mb-2">把月结单拖到这里</h2>
           <p class="text-sm text-fg2 mb-1">客户给您什么都行 — 自动识别并解析</p>
           <p class="text-[12px] text-fg3 mb-2">📄 PDF · 🖼️ JPG/PNG/HEIC · 📊 Excel · 📋 CSV · 📝 Word · 🗂️ ZIP · ✉️ Email · 🗄️ SQLite</p>
-          <p class="text-[11px] text-fg3 mb-6">单文件 ≤ 64 MB · 自动识别银行 · ZIP 自动展开 · HEIC 自动转 JPEG</p>
-          <label for="fileInput" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-elevated border border-subtle hover:border-line text-sm font-medium cursor-pointer transition">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M11 7H3M11 7l-3-3M11 7l-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-90 7 7)"/></svg>
-            选择文件
-          </label>
+          <p class="text-[11px] text-fg3 mb-6">支持<span class="text-accent2">拖整个文件夹</span> · ZIP 自动展开 · 单文件 ≤ 64 MB · HEIC 自动转 JPEG</p>
+          <div class="flex items-center justify-center gap-2">
+            <label for="fileInput" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-elevated border border-subtle hover:border-line text-sm font-medium cursor-pointer transition">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M11 7H3M11 7l-3-3M11 7l-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-90 7 7)"/></svg>
+              选择文件
+            </label>
+            <label for="folderInput" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-elevated border border-subtle hover:border-line text-sm font-medium cursor-pointer transition" title="选一整个文件夹,所有支持的文件递归读入">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M1 4a1 1 0 011-1h3l1 1.5h6a1 1 0 011 1v6a1 1 0 01-1 1H2a1 1 0 01-1-1V4z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+              选择文件夹
+            </label>
+          </div>
           <input id="fileInput" type="file" multiple
                  accept="application/pdf,image/*,.heic,.heif,.xlsx,.xls,.xlsm,.csv,.tsv,.docx,.zip,.eml,.msg,.txt,.md,.json,.db,.sqlite,.sqlite3" />
+          <input id="folderInput" type="file" multiple webkitdirectory directory />
         </div>
 
         <div class="mt-6 max-w-2xl w-full">
@@ -1653,11 +1660,86 @@ function renderStagedFiles() {
   }).join('');
 }
 
-// File input + drag drop
+// File input + folder input + drag drop
 document.getElementById('fileInput').addEventListener('change', async (e) => {
   if (e.target.files.length > 0) await handleFiles(e.target.files);
   e.target.value = '';
 });
+document.getElementById('folderInput').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files).filter(f => !isJunkName(f.name));
+  if (files.length > 0) {
+    toast(`从文件夹读入 ${files.length} 个文件`, 'info');
+    await handleFiles(files);
+  }
+  e.target.value = '';
+});
+
+// ─────────── Folder drag-drop support (webkitGetAsEntry) ───────────
+// 浏览器默认拖文件夹时 e.dataTransfer.files 是空的,必须用 entry API 递归读取
+function readDirEntries(dirEntry) {
+  return new Promise((resolve, reject) => {
+    const reader = dirEntry.createReader();
+    const all = [];
+    const readBatch = () => reader.readEntries((entries) => {
+      if (entries.length === 0) resolve(all);
+      else { all.push(...entries); readBatch(); }
+    }, reject);
+    readBatch();
+  });
+}
+async function entryToFiles(entry) {
+  if (entry.isFile) {
+    return new Promise((res, rej) => entry.file(f => res([f]), rej));
+  }
+  if (entry.isDirectory) {
+    const subs = await readDirEntries(entry);
+    const all = [];
+    for (const sub of subs) {
+      try {
+        const sf = await entryToFiles(sub);
+        all.push(...sf);
+      } catch (e) { console.warn(e); }
+    }
+    return all;
+  }
+  return [];
+}
+function isJunkName(name) {
+  return /^(\.DS_Store|Thumbs\.db|desktop\.ini|\._.*)$/i.test(name)
+      || name.startsWith('__MACOSX');
+}
+async function handleDataTransfer(dt) {
+  // Try entry API first (handles folders)
+  const items = dt.items ? Array.from(dt.items) : [];
+  if (items.length > 0 && items[0].webkitGetAsEntry) {
+    const all = [];
+    for (const item of items) {
+      if (item.kind !== 'file') continue;
+      const entry = item.webkitGetAsEntry();
+      if (entry) {
+        try { all.push(...await entryToFiles(entry)); }
+        catch (e) { console.warn(e); }
+      } else {
+        const f = item.getAsFile();
+        if (f) all.push(f);
+      }
+    }
+    const clean = all.filter(f => !isJunkName(f.name));
+    if (clean.length > 0) {
+      const folderCount = items.filter(it => it.webkitGetAsEntry()?.isDirectory).length;
+      if (folderCount > 0) {
+        toast(`从文件夹展开 ${clean.length} 个文件`, 'info');
+      }
+      await handleFiles(clean);
+    }
+    return;
+  }
+  // Fallback (older browsers)
+  if (dt.files.length > 0) {
+    const clean = Array.from(dt.files).filter(f => !isJunkName(f.name));
+    await handleFiles(clean);
+  }
+}
 
 const dz = document.getElementById('dropzone');
 ['dragenter', 'dragover'].forEach(evt => {
@@ -1667,7 +1749,7 @@ const dz = document.getElementById('dropzone');
   dz.addEventListener(evt, (e) => { e.preventDefault(); dz.classList.remove('dropzone-active'); });
 });
 dz.addEventListener('drop', async (e) => {
-  if (e.dataTransfer.files.length > 0) await handleFiles(e.dataTransfer.files);
+  await handleDataTransfer(e.dataTransfer);
 });
 dz.addEventListener('click', () => document.getElementById('fileInput').click());
 
@@ -1675,7 +1757,7 @@ dz.addEventListener('click', () => document.getElementById('fileInput').click())
 ['dragover'].forEach(evt => window.addEventListener(evt, (e) => { e.preventDefault(); }));
 window.addEventListener('drop', async (e) => {
   e.preventDefault();
-  if (e.dataTransfer.files.length > 0) await handleFiles(e.dataTransfer.files);
+  await handleDataTransfer(e.dataTransfer);
 });
 
 // ─────────── Chat rendering ───────────
