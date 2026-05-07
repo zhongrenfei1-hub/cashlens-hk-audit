@@ -258,6 +258,27 @@ tailwind.config = {
   .md h2 { font-family: "Instrument Serif", ui-serif, serif; font-size: 21px; font-weight: 400; color: #fff; margin: 16px 0 8px; letter-spacing: -0.01em; }
   .md h3 { font-size: 14px; font-weight: 600; color: #fff; margin: 12px 0 6px; }
   .md p { margin: 6px 0; line-height: 1.65; color: hsl(0 0% 86%); }
+  /* First paragraph (极简核心结论) — big highlight box for non-experts */
+  .md > p:first-of-type {
+    font-size: 15px;
+    line-height: 1.7;
+    padding: 18px 20px;
+    margin: 0 0 22px;
+    background: linear-gradient(135deg, hsl(270 60% 25% / 0.22), hsl(327 60% 25% / 0.12));
+    border-radius: 14px;
+    border-left: 3px solid hsl(327 98% 71%);
+    color: hsl(0 0% 92%);
+  }
+  .md > p:first-of-type strong {
+    font-size: 22px;
+    line-height: 1.3;
+    background: linear-gradient(90deg, hsl(262 93% 75%), hsl(327 98% 78%) 50%, hsl(21 100% 78%));
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
   .md ul, .md ol { margin: 6px 0; padding-left: 22px; color: hsl(0 0% 86%); }
   .md li { margin: 3px 0; line-height: 1.6; }
   .md code { background: hsl(0 0% 14%); padding: 1px 6px; border-radius: 4px; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: hsl(327 80% 80%); }
@@ -291,6 +312,14 @@ tailwind.config = {
 
   <div class="flex-1"></div>
 
+  <div id="ctxChip" class="chip bg-surface border border-subtle text-fg2" title="当前模型上下文用量">
+    <span>📊</span>
+    <span class="tabular">0K</span>
+    <span class="text-fg3">/</span>
+    <span class="tabular">128K</span>
+    <span class="text-fg3 hidden md:inline">已用</span>
+    <span class="tabular text-fg3 hidden md:inline">0%</span>
+  </div>
   <div id="costChip" class="chip bg-surface border border-subtle text-fg2">
     <span class="w-1.5 h-1.5 rounded-full bg-fg3"></span>
     <span class="tabular">$0.00</span>
@@ -810,11 +839,16 @@ const SYSTEM_PROMPT_V4 = `你是香港中小企业审计数据处理专家,专�
   A. 审计专业人士(需结构化数据 + 审计轨迹)
   B. 企业老板/财务(非专业,需快速看懂)
 
-═══ 第 1 段 · 极简核心结论 ═══(前置,严格 80 字内,不用 Markdown 标题)
-用大白话先说清 2-3 个核心发现。
-示例:"本期有效进账 HKD 284.7 万,主要来自 PING PONG GLOBAL 等 3 个客户,USD 占 92%。已排除 53 笔利息/手续费/出账。"
+═══ 第 1 段 · 极简核心结论 ═══(前置,80-120 字,不用 Markdown 标题)
+**给老板看的大白话**,把关键数字用 **\*\*HKD X,XXX,XXX\*\*** 加粗(前端会渲染成大字):
+- 这段时间收了多少钱 — 用「**实际收入**」(不要用「净进账」「Net Inbound」等术语)
+- 钱主要来自谁(2-3 个主要客户)
+- 主要哪种货币
+- 多少笔不是真实业务 — 用「**已剔除**」(不要用「Borderline」「Excluded」)
 
-═══ 第 2 段 · 可视化建议 ═══(2-4 张图,用 \`\`\`chart JSON 块)
+示例:"本期**实际收入 HKD 284.7 万**,主要来自 PING PONG GLOBAL 等 3 家客户,**美元占 92%**。另有 53 笔不算业务收入(利息、手续费、出账等),已自动剔除。"
+
+═══ 第 2 段 · 可视化建议 ═══(⚠️ **必须出至少 2 张图**,推荐 3-4 张,用 \`\`\`chart JSON 块)
 每个图表用以下 JSON 格式输出(前端会自动渲染成真图):
 \`\`\`chart
 {
@@ -840,8 +874,12 @@ const SYSTEM_PROMPT_V4 = `你是香港中小企业审计数据处理专家,专�
   Sheet 4 审计轨迹:  #|日期|金额HKD|描述|初步判断|最终判断|判断依据|引用条款|复核人|复核日期
 
 ═══ 第 4 段 · 详细说明 ═══
-① 按文件汇总表(每份文件:银行/期间/有效交易数/排除数/净进账)
-② 按月度汇总表(月份×币种矩阵 + 折合 HKD)
+① 按文件汇总表(每份文件:银行/期间/有效交易数/排除数/实际收入)
+② **月度 × 币种矩阵表**(必须输出此 Markdown 表格,与「统计流水模版.xlsx」结构一致):
+   - 表头:日期 / 港币储蓄 HKD / 外币储蓄 USD / 外币储蓄 EUR / 外币储蓄 JPY / 外币储蓄 SGD / 外币储蓄 CNY
+   - 行:每个月一行(Jul-24, Aug-24, ...),每格放该月该币种期末余额或当月净流入
+   - 末两行:MOVEMENT(原币合计)+ 汇率行(exchange X.XX)+ HKD 等值合计行
+   - 最后一行:**BAL: 港幣 HKD X,XXX,XXX.XX**(总余额)
 ③ 整体审计摘要(主要发现 / 异常提醒 / 数据质量)
 ④ 每笔 borderline 的简要审计轨迹(交易特征 / 初步分类 / 最终判断 / 引用条款)
 ⑤ 与 BIR51 / 管理层声明书 / FS Cash 余额的对接点
@@ -2027,6 +2065,105 @@ function renderChartCard(container, spec, idx) {
 
 window.addEventListener('resize', () => __chartInstances.forEach(c => c.resize()));
 
+// Auto-generate charts from TSV data when AI doesn't output ```chart blocks
+function autoGenerateChartsFromTsv(text) {
+  const specs = [];
+  const tsvMatches = [...text.matchAll(/```tsv\s*\n([\s\S]*?)```/g)];
+  if (tsvMatches.length === 0) return specs;
+
+  const parseNum = (s) => {
+    if (!s) return 0;
+    const n = parseFloat(String(s).replace(/[,\s¥$HKD人民币]/g, ''));
+    return isFinite(n) ? n : 0;
+  };
+  const parseTsv = (raw) => {
+    const lines = raw.trim().split('\n').filter(l => l.trim());
+    if (lines.length < 2) return null;
+    return { headers: lines[0].split('\t'), rows: lines.slice(1).map(l => l.split('\t')) };
+  };
+
+  // Sheet 1 (汇总表) — 月度净进账柱状图(按 HKD 折算汇总)
+  const s1 = parseTsv(tsvMatches[0][1]);
+  if (s1) {
+    const hkdCol = s1.headers.findIndex(h => /折合.*HKD|hkd.*equiv|净.*hkd/i.test(h));
+    const monthCol = s1.headers.findIndex(h => /月份|month/i.test(h));
+    if (hkdCol >= 0 && monthCol >= 0) {
+      const monthly = {};
+      s1.rows.forEach(r => {
+        const m = r[monthCol]; const v = parseNum(r[hkdCol]);
+        if (m && v) monthly[m] = (monthly[m] || 0) + v;
+      });
+      const data = Object.entries(monthly).filter(([_,v]) => Math.abs(v) > 0.01)
+                    .map(([label, value]) => ({ label, value }));
+      if (data.length > 1) {
+        const top = data.reduce((a,b) => Math.abs(b.value) > Math.abs(a.value) ? b : a);
+        specs.push({
+          type: 'bar', title: '📈 月度净进账(HKD 等值)',
+          x_axis: '月份', y_axis: 'HKD',
+          data, color_scheme: 'include',
+          insight: `最高月 ${top.label}:${top.value.toLocaleString('zh-HK', {maximumFractionDigits: 0})} HKD`,
+        });
+      }
+    }
+  }
+
+  // Sheet 2 (有效进账明细) — 主要付款方 Top10 横向柱
+  if (tsvMatches[1]) {
+    const s2 = parseTsv(tsvMatches[1][1]);
+    if (s2) {
+      const cpCol = s2.headers.findIndex(h => /对方|付款|customer|payer/i.test(h));
+      const hkdCol2 = s2.headers.findIndex(h => /折合.*HKD|hkd/i.test(h));
+      if (cpCol >= 0 && hkdCol2 >= 0) {
+        const byCust = {};
+        s2.rows.forEach(r => {
+          const c = (r[cpCol] || '').trim() || '未知';
+          const v = parseNum(r[hkdCol2]);
+          if (v) byCust[c] = (byCust[c] || 0) + v;
+        });
+        const top10 = Object.entries(byCust).sort((a,b) => b[1]-a[1]).slice(0, 10)
+                       .map(([label, value]) => ({ label, value }));
+        if (top10.length >= 2) {
+          const total = top10.reduce((s,d) => s + d.value, 0);
+          const topShare = (top10[0].value / total * 100).toFixed(0);
+          specs.push({
+            type: 'horizontal-bar', title: '👥 主要付款方 Top10',
+            x_axis: 'HKD', data: top10, color_scheme: 'rainbow',
+            insight: `第一大客户 ${top10[0].label} 占 Top10 的 ${topShare}%`,
+          });
+        }
+      }
+    }
+  }
+
+  // Sheet 3 (已排除) — 排除原因占比环形图
+  if (tsvMatches[2]) {
+    const s3 = parseTsv(tsvMatches[2][1]);
+    if (s3) {
+      const typeCol = s3.headers.findIndex(h => /类型|type|reason|理由/i.test(h));
+      const amtCol = s3.headers.findIndex(h => /金额|amount/i.test(h));
+      if (typeCol >= 0 && amtCol >= 0) {
+        const byType = {};
+        s3.rows.forEach(r => {
+          const t = (r[typeCol] || '其他').trim();
+          const v = Math.abs(parseNum(r[amtCol]));
+          if (v) byType[t] = (byType[t] || 0) + v;
+        });
+        const data = Object.entries(byType).map(([label, value]) => ({ label, value }));
+        if (data.length >= 2) {
+          const top = data.reduce((a,b) => b.value > a.value ? b : a);
+          specs.push({
+            type: 'doughnut', title: '🚫 已排除项目分布',
+            data, color_scheme: 'exclude',
+            insight: `最大类:${top.label}`,
+          });
+        }
+      }
+    }
+  }
+
+  return specs;
+}
+
 function renderArtifactReport(text) {
   // dispose old charts
   __chartInstances.forEach(c => { try { c.dispose(); } catch {} });
@@ -2036,12 +2173,20 @@ function renderArtifactReport(text) {
   reportEl.innerHTML = renderMarkdown(text);
 
   // Charts: render in dedicated tab
-  const chartSpecs = extractChartSpecs(text);
+  let chartSpecs = extractChartSpecs(text);
+  const aiOutputCount = chartSpecs.length;
+  // Fallback: if AI didn't output charts, generate from TSV data
+  if (chartSpecs.length === 0) {
+    chartSpecs = autoGenerateChartsFromTsv(text);
+  }
   const chartsEl = document.getElementById('artifactChartsTab');
   chartsEl.innerHTML = '';
   if (chartSpecs.length === 0) {
-    chartsEl.innerHTML = '<div class="text-[12px] text-fg3">报告中未找到 ```chart 代码块。<br>提示词 v4.1 会让 AI 自动输出图表配置,如果没出现可能是模型版本较旧或 token 不够。</div>';
+    chartsEl.innerHTML = '<div class="text-[12px] text-fg3">数据不足以生成图表。<br>需要至少一张包含数值的 ```tsv 数据表(月份 + HKD 等值列等)。</div>';
   } else {
+    if (aiOutputCount === 0) {
+      chartsEl.innerHTML = '<div class="text-[11px] text-warn mb-3 px-3 py-2 bg-warn/10 border border-warn/20 rounded-lg">💡 AI 没有主动出图,系统从你的数据表自动生成了 ' + chartSpecs.length + ' 张。</div>';
+    }
     chartSpecs.forEach((spec, i) => renderChartCard(chartsEl, spec, i));
     // Update tab badge
     const tabBtn = document.querySelector('[data-tab="charts"]');
@@ -2742,7 +2887,52 @@ async function sendFollowup() {
 }
 
 // ─────────── Cost chip ───────────
+// Model context window limits (tokens)
+const MODEL_CONTEXT = {
+  'gpt-5.4': 128000, 'gpt-5.5': 128000,
+  'gpt-4o': 128000, 'gpt-4o-mini': 128000, 'o1-mini': 128000,
+  'claude-sonnet-4-5-20250929': 200000, 'claude-opus-4-5-20250929': 200000,
+  'claude-opus-4-7-20260301': 200000, 'claude-haiku-4-5': 200000,
+  'deepseek-chat': 64000, 'deepseek-reasoner': 64000,
+  'qwen-plus': 128000, 'qwen-max': 32000, 'qwen-vl-plus': 32000, 'qwen-vl-max': 32000,
+  'moonshot-v1-128k': 128000, 'moonshot-v1-32k': 32000, 'moonshot-v1-8k': 8000,
+  'glm-4-plus': 128000, 'glm-4v-plus': 128000, 'glm-4-air': 128000,
+  'doubao-1-5-pro-256k-250115': 256000, 'doubao-1-5-pro-32k-250115': 32000,
+  'doubao-1-5-vision-pro-32k-250115': 32000,
+  'gemini-2.0-flash-exp': 1000000,
+};
+function getContextLimit() {
+  const m = getModel();
+  return MODEL_CONTEXT[m] || 128000; // default 128K guess for unknown
+}
+
 let __sessionCost = 0;
+let __peakInputTokens = 0;  // running max so chip doesn't flicker down
+
+function updateCtxChip(currentInputTokens) {
+  const limit = getContextLimit();
+  __peakInputTokens = Math.max(__peakInputTokens, currentInputTokens);
+  const used = __peakInputTokens;
+  const pct = Math.min(100, Math.round(used / limit * 100));
+  const fmtK = (n) => n >= 1e6 ? (n/1e6).toFixed(1) + 'M' : (n >= 1000 ? (n/1000).toFixed(0) + 'K' : n);
+  // Color: <50% green, 50-80% warn, >80% danger
+  const color = pct < 50 ? 'ok' : (pct < 80 ? 'warn' : 'err');
+  const dot = `<span class="w-1.5 h-1.5 rounded-full bg-${color}"></span>`;
+  document.getElementById('ctxChip').innerHTML = `
+    ${dot}
+    <span>📊</span>
+    <span class="tabular">${fmtK(used)}</span>
+    <span class="text-fg3">/</span>
+    <span class="tabular">${fmtK(limit)}</span>
+    <span class="text-fg3 hidden md:inline">已用</span>
+    <span class="tabular text-fg3 hidden md:inline">${pct}%</span>
+  `;
+  // Title shows real numbers + warning if high
+  document.getElementById('ctxChip').title =
+    `已用 ${used.toLocaleString()} / ${limit.toLocaleString()} tokens (${pct}%)` +
+    (pct >= 80 ? ' · ⚠️ 即将超出,建议缩短追问或新开会话' : '');
+}
+
 function updateCostChip(usage, accumulate = false) {
   const mi = getModelInfo();
   const inTokens = (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
@@ -2761,6 +2951,14 @@ function updateCostChip(usage, accumulate = false) {
     <span class="text-fg3">·</span>
     <span class="tabular">${(totalIn/1000).toFixed(1)}K + ${(outTokens/1000).toFixed(1)}K</span>
   `;
+  // Sync context chip
+  updateCtxChip(totalIn + outTokens);
+}
+
+// Reset context chip on new session
+function resetCtxChip() {
+  __peakInputTokens = 0;
+  updateCtxChip(0);
 }
 
 // ─────────── Export ───────────
@@ -2874,6 +3072,7 @@ function newSession() {
     <span class="text-fg3">·</span>
     <span>本次会话</span>
   `;
+  resetCtxChip();
 }
 
 function openCompanyEditor() {
@@ -3179,6 +3378,7 @@ window.addEventListener('resize', () => {
 window.addEventListener('DOMContentLoaded', () => {
   updateApiKeyDot();
   updateModelLabel();
+  resetCtxChip();
   renderProjectList();
   startComposerHints();
 
