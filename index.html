@@ -1979,6 +1979,22 @@ function switchArtifactTab(tab) {
   });
   document.querySelectorAll('.art-pane').forEach(p => p.classList.add('hidden'));
   document.getElementById(`artifact${tab.charAt(0).toUpperCase() + tab.slice(1)}Tab`).classList.remove('hidden');
+  // ECharts 在 hidden 容器里 init 时容器尺寸是 0,切换可见后必须 resize 让它重测量 + 重绘,
+  // 否则切到「图表」tab 看到的是空白(图实例存在但 canvas 是 0×0)。
+  // 实测在 art-pane 从 hidden 移除到 layout 真正稳定之间,中间帧拿到的容器尺寸是
+  // 「width 已就位但 height 还是 0」的过渡态(headless 浏览器尤甚),所以用阶梯式 resize
+  // 序列覆盖各种 layout timing。renderChartCard 里也挂了 ResizeObserver 处理后续变化。
+  if (tab === 'charts' && typeof echarts !== 'undefined') {
+    const resizeAll = () => {
+      document.querySelectorAll('#artifactChartsTab [id^="chart_"]').forEach(d => {
+        try { echarts.getInstanceByDom(d)?.resize(); } catch {}
+      });
+    };
+    resizeAll();
+    requestAnimationFrame(resizeAll);
+    setTimeout(resizeAll, 50);
+    setTimeout(resizeAll, 200);
+  }
 }
 
 // ─────────── Chart rendering (ECharts) ───────────
@@ -2125,10 +2141,22 @@ function renderChartCard(container, spec, idx) {
     ${spec.insight ? `<div class="px-4 pb-3 text-[12px] text-fg2 border-t border-subtle pt-2"><span class="text-accent2 font-medium">💡</span> ${escapeHtml(spec.insight)}</div>` : ''}
   `;
   container.appendChild(wrap);
-  const inst = echarts.init(wrap.querySelector(`#chart_${idx}`), null, { renderer: 'canvas' });
+  // 注:此时父级 charts tab 大概率还是 hidden(用户在 report tab),容器 0×0,
+  // ECharts init 出来的实例尺寸也是 0。
+  // 用 ResizeObserver 监听容器尺寸变化,切到 charts tab 时容器从 0→真实尺寸会触发 resize,
+  // 比依赖 switchArtifactTab 在某个固定 timing 调 resize 鲁棒得多(headless 浏览器里
+  // RAF/setTimeout 跟 layout 时机不一定对得上)。
+  const target = wrap.querySelector(`#chart_${idx}`);
+  const inst = echarts.init(target, null, { renderer: 'canvas' });
+  __chartInstances.push(inst);
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => {
+      try { inst.resize(); } catch {}
+    });
+    ro.observe(target);
+  }
   try {
     inst.setOption(buildChartOption(spec));
-    __chartInstances.push(inst);
   } catch (e) {
     console.warn('chart render failed', e);
   }
