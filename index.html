@@ -500,6 +500,27 @@ tailwind.config = {
             开始分析
           </button>
         </div>
+        <details id="entityHintsPanel" class="mt-2.5 group">
+          <summary class="cursor-pointer text-[11px] text-fg3 hover:text-fg1 select-none flex items-center gap-1.5 list-none">
+            <span class="group-open:rotate-90 transition-transform inline-block">▸</span>
+            <span>高级:同名互转 / 董事往来 识别(可选)</span>
+            <span class="text-fg3">— 填了 AI 才能精准排除"伪进账"</span>
+          </summary>
+          <div class="mt-2 grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] text-fg2 mb-1">公司在月结单上的别名 / 英文名</label>
+              <textarea id="aliasesInput" rows="3" placeholder="一行一个,例:&#10;HK GANG SHENG WEN TOU TECH CO., LIMITED&#10;香港煜坤國際"
+                        class="w-full bg-input border border-subtle rounded-lg px-2.5 py-1.5 text-[12px] focus-glow resize-none scrollbar leading-relaxed"></textarea>
+              <div class="text-[10.5px] text-fg3 mt-1">凡这些名字打入的款项 → 同名互转,排除</div>
+            </div>
+            <div>
+              <label class="block text-[11px] text-fg2 mb-1">董事姓名</label>
+              <textarea id="directorsInput" rows="3" placeholder="一行一个,例:&#10;CHAN TAI MAN&#10;陳大文"
+                        class="w-full bg-input border border-subtle rounded-lg px-2.5 py-1.5 text-[12px] focus-glow resize-none scrollbar leading-relaxed"></textarea>
+              <div class="text-[10.5px] text-fg3 mt-1">凡这些董事打入的款项 → 董事往来,排除</div>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
 
@@ -1063,6 +1084,8 @@ const PROVIDERS = {
 // ─────────── Settings (localStorage) ───────────
 const SETTINGS_KEY = 'cashlens_settings_v2';
 const PROJECTS_KEY = 'cashlens_projects_v1';
+// 按公司名缓存别名/董事;同公司下次自动 prefill,免重填
+const ENTITY_CACHE_KEY = 'cashlens_entity_cache_v1';
 
 function loadSettings() {
   try {
@@ -1071,6 +1094,26 @@ function loadSettings() {
 }
 function saveSettingsRaw(s) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+function loadEntityCache() {
+  try { return JSON.parse(localStorage.getItem(ENTITY_CACHE_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveEntityCacheFor(name, aliases, directors) {
+  if (!name) return;
+  const all = loadEntityCache();
+  if (aliases.length === 0 && directors.length === 0) {
+    delete all[name];
+  } else {
+    all[name] = { aliases, directors, ts: Date.now() };
+  }
+  // 只保留最近 50 个公司,防 localStorage 膨胀
+  const entries = Object.entries(all).sort((a, b) => (b[1]?.ts || 0) - (a[1]?.ts || 0)).slice(0, 50);
+  localStorage.setItem(ENTITY_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
+}
+function loadEntityCacheFor(name) {
+  return loadEntityCache()[(name || '').trim()] || null;
 }
 
 // ─────────── Embedded defaults (zero-config for end users) ───────────
@@ -3079,6 +3122,18 @@ async function startAnalysis() {
 - 凡发现"账实不符"或"无源凭据"的项目,在审计轨迹明确标注
 - 报告里增加一段「外部资料交叉验证结果」,用 ✓ / ⚠ / ✗ 表示对得上 / 部分对 / 对不上` : '';
 
+  // 读取「别名 / 董事」可选输入,有则塞进 prompt;同时缓存到 localStorage
+  const aliases = (document.getElementById('aliasesInput')?.value || '')
+    .split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const directors = (document.getElementById('directorsInput')?.value || '')
+    .split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  saveEntityCacheFor(company, aliases, directors);
+
+  const entityHint = (aliases.length || directors.length) ? `
+
+【主体识别清单(必须严格执行,优先级最高)】
+${aliases.length ? '公司在月结单上的别名 — 凡 Debit 列付款方匹配以下任一名字,直接判「同名互转」并排除,在排除明细里引用此清单:\n' + aliases.map(a => '  • ' + a).join('\n') + '\n' : ''}${directors.length ? '董事姓名 — 凡 Debit 列付款方匹配以下任一姓名(中英文均判),直接判「董事往来」并排除:\n' + directors.map(d => '  • ' + d).join('\n') : ''}` : '';
+
   const userText = `请严格按照系统提示词,分析以下文件,
 计算 ${company} 在 ${periodStart} 至 ${periodEnd} 的有效净进账金额。
 
@@ -3090,7 +3145,7 @@ async function startAnalysis() {
 3. 汇率:优先 HKMA 中间价,精度 4 位小数,附 Annex I 汇率表
 4. 输出:严格按 4 段顺序(极简结论 / 可视化 / 数据 / 详细)
 5. 标注与 BIR51 / 管理层声明书 / FS Cash 余额的对接点
-${crossValidationHint}
+${entityHint}${crossValidationHint}
 【文件清单(共 ${stagedFiles.length} 份)】
 ${fileList}`;
 
@@ -3429,6 +3484,7 @@ function loadProject(id) {
   document.getElementById('companyInput').value = p.company;
   document.getElementById('periodStart').value = p.periodStart;
   document.getElementById('periodEnd').value = p.periodEnd;
+  applyEntityCachePrefill(p.company);
   window.__latestReport = p.fullText;
   document.getElementById('exportBtn').disabled = false;
   document.getElementById('exportXlsxBtn').disabled = false;
@@ -3769,6 +3825,20 @@ window.addEventListener('resize', () => {
   if (document.getElementById('tourOverlay')) showTourStep();
 });
 
+// 公司名变更时,从 entityCache 自动 prefill 别名/董事
+function applyEntityCachePrefill(name) {
+  const cached = loadEntityCacheFor(name);
+  const aliasesEl = document.getElementById('aliasesInput');
+  const directorsEl = document.getElementById('directorsInput');
+  if (!aliasesEl || !directorsEl) return;
+  aliasesEl.value = cached?.aliases?.join('\n') || '';
+  directorsEl.value = cached?.directors?.join('\n') || '';
+  // 命中缓存时自动展开折叠区,让用户看到 prefill 结果
+  if (cached && (cached.aliases?.length || cached.directors?.length)) {
+    document.getElementById('entityHintsPanel')?.setAttribute('open', '');
+  }
+}
+
 // ─────────── Init ───────────
 window.addEventListener('DOMContentLoaded', () => {
   updateApiKeyDot();
@@ -3777,9 +3847,14 @@ window.addEventListener('DOMContentLoaded', () => {
   renderProjectList();
   startComposerHints();
 
-  const tourSeen = !!localStorage.getItem(TOUR_KEY);
+  // 公司名输入框 change 时触发 prefill;初次载入也跑一次(可能默认值有缓存)
+  const companyEl = document.getElementById('companyInput');
+  if (companyEl) {
+    companyEl.addEventListener('change', (e) => applyEntityCachePrefill(e.target.value));
+    applyEntityCachePrefill(companyEl.value);
+  }
 
-  // Key is embedded — zero-config for customers. Just launch tour on first visit.
+  const tourSeen = !!localStorage.getItem(TOUR_KEY);
   if (!tourSeen) {
     setTimeout(() => startTour(), 600);
   }
