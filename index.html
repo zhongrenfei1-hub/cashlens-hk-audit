@@ -1050,8 +1050,8 @@ const PROVIDERS = {
     endpointLabel: 'api.aipaibox.com',
     models: [
       // GPT-5 系列(部分 aipaibox 套餐唯一可用)
-      { id: 'gpt-5.4', label: 'GPT-5.4(推荐,支持视觉)', in: 5, out: 20, currency: '¥' },
-      { id: 'gpt-5.5', label: 'GPT-5.5(更强,但贵)', in: 10, out: 40, currency: '¥' },
+      { id: 'gpt-5.5', label: 'GPT-5.5(推荐,最强,支持视觉)', in: 10, out: 40, currency: '¥' },
+      { id: 'gpt-5.4', label: 'GPT-5.4(便宜兜底,套餐都有)', in: 5, out: 20, currency: '¥' },
       // 其他模型(需要套餐开通)
       { id: 'gpt-4o-mini', label: 'GPT-4o Mini(需开通)', in: 1, out: 4, currency: '¥' },
       { id: 'gpt-4o', label: 'GPT-4o(需开通)', in: 18, out: 72, currency: '¥' },
@@ -1060,7 +1060,7 @@ const PROVIDERS = {
       { id: 'deepseek-chat', label: 'DeepSeek Chat(需开通,纯文本)', in: 2, out: 8, currency: '¥' },
       { id: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash(需开通)', in: 0.5, out: 2, currency: '¥' },
     ],
-    hint: '🇨🇳 aipaibox 中转 · 不同套餐能用的模型不同,先试 gpt-5.4(基础套餐都有)· 失败提示「No available channel」就换一个',
+    hint: '🇨🇳 aipaibox 中转 · 默认 gpt-5.5(最强)· 套餐不支持出现「No available channel」可改用 gpt-5.4',
     pdfMode: 'image',
   },
   oneapi: {
@@ -1144,8 +1144,10 @@ function saveSettingsRaw(s) {
 // 客户打开即用,无需配置。高级用户仍可在设置里覆盖。
 const DEFAULTS = {
   provider: 'aipaibox',
+  // 注:DEFAULTS.model 是新用户首次使用时的默认值;老用户已经在 localStorage 里保存了
+  // 自己的 model 选择,这里改不会影响他们 — 老用户要换模型需要在设置面板里改
   apiKey:   'sk-RphjlV9CT2PHfNf454LFEl0andGe3kiH6FDoLx8hFCLu4WvM',
-  model:    'gpt-5.4',
+  model:    'gpt-5.5',
 };
 
 function getProvider() {
