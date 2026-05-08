@@ -3,11 +3,10 @@
 > 给下一个 AI / Claude / Codex 看。新会话开始时，把这份文档贴进去，然后说：
 > “接着这份 HANDOFF.md 继续帮我做 Cashlens，我现在要：[新需求]”。
 
-最后更新：2026-05-08 14:48 CST
-当前线上确认版本：`f323390` (`fix: harden report rendering and validation`)
+最后更新：2026-05-08 14:55 CST
+当前线上确认版本：`288147b` (`chore: 默认模型从 gpt-5.4 升到 gpt-5.5`)
 本地待推送：
-- 一键导出 Excel（模板月度矩阵 + 4 张明细 sheet）
-- 默认模型从 gpt-5.4 升到 gpt-5.5
+- 默认服务商从 aipaibox/gpt-5.5 切到 DeepSeek/deepseek-chat（内置 key 已更换为新的 DeepSeek key，记录里仅 [REDACTED]）
 
 ---
 
@@ -56,7 +55,10 @@
   - Tesseract.js（懒加载）
   - Google Fonts / Inter / Instrument Serif / IBM Plex Mono
 - AI Provider：支持 aipaibox、DeepSeek、通义千问、豆包、Kimi、智谱、OpenRouter、OpenAI、Anthropic、自定义 OpenAI-compatible。
-- 当前默认 provider/model：`aipaibox` / `gpt-5.5`（在 e0f200c 之后从 `gpt-5.4` 切到 `gpt-5.5`，单价翻倍但效果更强；老用户 localStorage 里已存的旧选择不变，需在设置面板手动改）。
+- 当前默认 provider/model：`deepseek` / `deepseek-chat`（V3，¥0.27/M 输入 · ¥1.1/M 输出）。
+  - 内置 key 已切换到客户提供的 DeepSeek key（前缀 `sk-d6c…`，文档里不展开，按 [REDACTED] 处理）。
+  - ⚠️ DeepSeek 不支持图片 / PDF 原生输入（`pdfMode: 'text'`），PDF 会被 PDF.js 先 extract 成纯文本再喂给模型 — 表格密集 / 扫描件型流水识别精度会受影响，必要时让客户切回 aipaibox 系。
+  - 老用户 localStorage 里已存的旧 provider/model/key 不变，需要切换得自己进设置面板改。
 - 默认 API key 存在于前端源码中，文档里不要展开写，统一视为 `[REDACTED]`。
 
 ---

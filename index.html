@@ -1143,11 +1143,11 @@ function saveSettingsRaw(s) {
 // ─────────── Embedded defaults (zero-config for end users) ───────────
 // 客户打开即用,无需配置。高级用户仍可在设置里覆盖。
 const DEFAULTS = {
-  provider: 'aipaibox',
-  // 注:DEFAULTS.model 是新用户首次使用时的默认值;老用户已经在 localStorage 里保存了
-  // 自己的 model 选择,这里改不会影响他们 — 老用户要换模型需要在设置面板里改
-  apiKey:   'sk-RphjlV9CT2PHfNf454LFEl0andGe3kiH6FDoLx8hFCLu4WvM',
-  model:    'gpt-5.5',
+  provider: 'deepseek',
+  // 注:DEFAULTS 仅对新用户生效;老用户 localStorage 里已存的 provider/model/key 不变,
+  // 需要切换得自己进设置面板改(或加一段迁移代码强制覆盖)
+  apiKey:   'sk-d6cc8bd28c5043edb4ce53aa31767e10',
+  model:    'deepseek-chat',
 };
 
 function getProvider() {
