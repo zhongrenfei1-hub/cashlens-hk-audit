@@ -416,6 +416,17 @@ tailwind.config = {
 
       <!-- Empty state -->
       <div id="emptyState" class="h-full flex flex-col items-center justify-center px-8 py-12">
+        <div id="apiKeyWarning" class="hidden mb-4 max-w-2xl w-full px-4 py-3 rounded-xl bg-warn/10 border border-warn/40 flex items-start gap-3">
+          <span class="text-warn text-base leading-none mt-0.5">⚠️</span>
+          <div class="flex-1 text-[12.5px] leading-relaxed">
+            <div class="font-semibold text-fg1 mb-0.5">用前要先填 API Key</div>
+            <div class="text-fg2">
+              第一次用,请去 <a href="https://platform.deepseek.com/api_keys" target="_blank" class="underline text-accent2 hover:opacity-80">DeepSeek 官网</a> 申请 Key,然后点这里粘进来 ↓(需要充少量话费,几块钱够跑很多次)
+            </div>
+          </div>
+          <button onclick="openSettings()" class="px-3 py-1.5 rounded-md bg-elevated border border-subtle hover:bg-base text-[11.5px] whitespace-nowrap text-fg1 self-center">去设置</button>
+        </div>
+
         <div id="dropzone" class="w-full max-w-2xl border-2 border-dashed border-subtle rounded-2xl p-12 text-center transition-all hover:border-line cursor-pointer">
           <div class="w-14 h-14 mx-auto mb-5 rounded-2xl bg-elevated border border-subtle flex items-center justify-center">
             <svg class="w-6 h-6 text-accent2" viewBox="0 0 24 24" fill="none">
@@ -1144,9 +1155,10 @@ function saveSettingsRaw(s) {
 // 客户打开即用,无需配置。高级用户仍可在设置里覆盖。
 const DEFAULTS = {
   provider: 'deepseek',
-  // 注:DEFAULTS 仅对新用户生效;老用户 localStorage 里已存的 provider/model/key 不变,
-  // 需要切换得自己进设置面板改(或加一段迁移代码强制覆盖)
-  apiKey:   'sk-d6cc8bd28c5043edb4ce53aa31767e10',
+  // 注:不再内置 API Key — 客户必须自己在设置面板里填自己的 DeepSeek key。
+  // 之前内置 key 会暴露在前端源码 + GitHub 上,所以改架构由客户自带。
+  // streamAI() 入口会检查 key 是否为空,空时自动 toast + openSettings()。
+  apiKey:   '',
   model:    'deepseek-chat',
 };
 
@@ -1192,6 +1204,9 @@ function updateApiKeyDot() {
   const dot = document.getElementById('apiKeyDot');
   const has = !!getApiKey();
   dot.className = `w-1.5 h-1.5 rounded-full ${has ? 'bg-ok' : 'bg-warn'}`;
+  // 首页空状态的引导横幅:未填 key 时显示,已填则隐藏
+  const warning = document.getElementById('apiKeyWarning');
+  if (warning) warning.classList.toggle('hidden', has);
 }
 
 function updateModelLabel() {
@@ -3622,8 +3637,8 @@ const TOUR_STEPS = [
   },
   {
     sel: '#apiKeyDot',
-    title: '⚙️ AI 已就绪',
-    body: '工具已经<span style="color:hsl(327 98% 71%)">内置 API Key</span>,你不用做任何配置 — 直接拖文件上传就能开始分析。<br><br>如果你是高级用户、想换成自己的 Key 或别家模型,点齿轮图标进设置改。<br><br><span style="color:hsl(327 98% 71%)">支持 9 家服务商</span>:DeepSeek、通义千问、豆包、Kimi、智谱、aipaibox 中转、OpenRouter、OpenAI、Anthropic Claude。',
+    title: '⚙️ 用前先填 API Key',
+    body: '右上角这个小圆点 <span style="color:hsl(327 98% 71%)">绿色 = 已填,黄色 = 未填</span>。<br><br>第一次用要先去 <span style="color:hsl(327 98% 71%)">DeepSeek 官网</span> 注册账号、申请 API Key,再点旁边的齿轮图标进设置面板把 Key 粘进来。<br><br>申请地址:<a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:hsl(327 98% 71%);text-decoration:underline">platform.deepseek.com/api_keys</a>(需要充少量话费,几块钱够跑很多次)。<br><br>除了 DeepSeek,工具还<span style="color:hsl(327 98% 71%)">支持 9 家服务商</span>:通义千问、豆包、Kimi、智谱、aipaibox 中转、OpenRouter、OpenAI、Anthropic Claude。',
     pos: 'top',
   },
   {

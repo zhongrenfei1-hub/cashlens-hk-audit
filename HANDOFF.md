@@ -3,10 +3,11 @@
 > 给下一个 AI / Claude / Codex 看。新会话开始时，把这份文档贴进去，然后说：
 > “接着这份 HANDOFF.md 继续帮我做 Cashlens，我现在要：[新需求]”。
 
-最后更新：2026-05-08 14:55 CST
-当前线上确认版本：`288147b` (`chore: 默认模型从 gpt-5.4 升到 gpt-5.5`)
+最后更新：2026-05-08 15:30 CST
+当前线上确认版本：`e9b3f98` (`feat(worker): Cloudflare Worker 反代框架`)
 本地待推送：
-- 默认服务商从 aipaibox/gpt-5.5 切到 DeepSeek/deepseek-chat（内置 key 已更换为新的 DeepSeek key，记录里仅 [REDACTED]）
+- 切到 B 方案：移除内置 API Key，客户必须自己在设置面板填自己的 DeepSeek key
+- 教程文案 + 首页空状态横幅同步更新
 
 ---
 
@@ -56,9 +57,14 @@
   - Google Fonts / Inter / Instrument Serif / IBM Plex Mono
 - AI Provider：支持 aipaibox、DeepSeek、通义千问、豆包、Kimi、智谱、OpenRouter、OpenAI、Anthropic、自定义 OpenAI-compatible。
 - 当前默认 provider/model：`deepseek` / `deepseek-chat`（V3，¥0.27/M 输入 · ¥1.1/M 输出）。
-  - 内置 key 已切换到客户提供的 DeepSeek key（前缀 `sk-d6c…`，文档里不展开，按 [REDACTED] 处理）。
-  - ⚠️ DeepSeek 不支持图片 / PDF 原生输入（`pdfMode: 'text'`），PDF 会被 PDF.js 先 extract 成纯文本再喂给模型 — 表格密集 / 扫描件型流水识别精度会受影响，必要时让客户切回 aipaibox 系。
-  - 老用户 localStorage 里已存的旧 provider/model/key 不变，需要切换得自己进设置面板改。
+- 当前内置 API Key：**无**（B 方案）。
+  - 历史上 aipaibox 和 DeepSeek 的 key 都曾内置在前端代码里，导致 GitHub 公开仓库 + 客户右键即可看到，存在被刷风险。
+  - 自本次起 `DEFAULTS.apiKey = ''`，新用户首次访问需要自己去 https://platform.deepseek.com/api_keys 申请 key 并粘到设置面板里。
+  - 首页空状态加了一条黄色 ⚠️ 横幅，未填 key 时显示"用前要先填 API Key"+ DeepSeek 官网链接 +「去设置」按钮，由 `updateApiKeyDot()` 同步控制 hide/show。
+  - 点开始分析时若 key 为空，原有 fallback (`streamAI` 入口 line ~3119) 会 toast + 自动 openSettings，无需新增。
+  - ⚠️ DeepSeek 不支持图片 / PDF 原生输入（`pdfMode: 'text'`），PDF 会被 PDF.js 先 extract 成纯文本再喂给模型 — 表格密集 / 扫描件型流水识别精度会受影响，必要时让客户切到 aipaibox / 通义 / 豆包系。
+  - 老用户 localStorage 里已存的旧 provider/model/key 不变，他们继续用旧设置直到自己改。
+- Cloudflare Worker 反代（C 方案）的代码骨架在 `cloudflare-worker/` 目录里保留，**目前未启用**——前端不指向它。如以后用户改主意想用代理隐藏 key，按 `cloudflare-worker/README.md` 部署一遍 + 把前端 `PROVIDERS.deepseek.baseUrl` 改成 Worker URL 即可。
 - 默认 API key 存在于前端源码中，文档里不要展开写，统一视为 `[REDACTED]`。
 
 ---
