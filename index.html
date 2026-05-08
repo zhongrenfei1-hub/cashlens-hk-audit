@@ -416,15 +416,13 @@ tailwind.config = {
 
       <!-- Empty state -->
       <div id="emptyState" class="h-full flex flex-col items-center justify-center px-8 py-12">
-        <div id="apiKeyWarning" class="hidden mb-4 max-w-2xl w-full px-4 py-3 rounded-xl bg-warn/10 border border-warn/40 flex items-start gap-3">
-          <span class="text-warn text-base leading-none mt-0.5">⚠️</span>
+        <div id="apiKeyWarning" class="hidden mb-4 max-w-2xl w-full px-4 py-3 rounded-xl bg-warn/10 border border-warn/40 flex items-center gap-3">
+          <span class="text-warn text-base leading-none">⚠️</span>
           <div class="flex-1 text-[12.5px] leading-relaxed">
-            <div class="font-semibold text-fg1 mb-0.5">用前要先填 API Key</div>
-            <div class="text-fg2">
-              第一次用,请去 <a href="https://platform.deepseek.com/api_keys" target="_blank" class="underline text-accent2 hover:opacity-80">DeepSeek 官网</a> 申请 Key,然后点这里粘进来 ↓(需要充少量话费,几块钱够跑很多次)
-            </div>
+            <span class="font-semibold text-fg1">请先在设置里填 API Key</span>
+            <span class="text-fg2"> · 点右上角齿轮 ⚙️ 把 Key 粘进去就能开始</span>
           </div>
-          <button onclick="openSettings()" class="px-3 py-1.5 rounded-md bg-elevated border border-subtle hover:bg-base text-[11.5px] whitespace-nowrap text-fg1 self-center">去设置</button>
+          <button onclick="openSettings()" class="px-3 py-1.5 rounded-md bg-elevated border border-subtle hover:bg-base text-[11.5px] whitespace-nowrap text-fg1">去设置</button>
         </div>
 
         <div id="dropzone" class="w-full max-w-2xl border-2 border-dashed border-subtle rounded-2xl p-12 text-center transition-all hover:border-line cursor-pointer">
@@ -3637,8 +3635,8 @@ const TOUR_STEPS = [
   },
   {
     sel: '#apiKeyDot',
-    title: '⚙️ 用前先填 API Key',
-    body: '右上角这个小圆点 <span style="color:hsl(327 98% 71%)">绿色 = 已填,黄色 = 未填</span>。<br><br>第一次用要先去 <span style="color:hsl(327 98% 71%)">DeepSeek 官网</span> 注册账号、申请 API Key,再点旁边的齿轮图标进设置面板把 Key 粘进来。<br><br>申请地址:<a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:hsl(327 98% 71%);text-decoration:underline">platform.deepseek.com/api_keys</a>(需要充少量话费,几块钱够跑很多次)。<br><br>除了 DeepSeek,工具还<span style="color:hsl(327 98% 71%)">支持 9 家服务商</span>:通义千问、豆包、Kimi、智谱、aipaibox 中转、OpenRouter、OpenAI、Anthropic Claude。',
+    title: '⚙️ 填 API Key',
+    body: '右上角这个小圆点:<span style="color:hsl(327 98% 71%)">绿色 = 已填,黄色 = 未填</span>。<br><br>点旁边的齿轮图标进设置面板,把你的 API Key 粘到「API Key」那一行 → 保存,就能开始。<br><br>默认服务商是 <span style="color:hsl(327 98% 71%)">DeepSeek</span>;也<span style="color:hsl(327 98% 71%)">支持 9 家服务商</span>(通义千问、豆包、Kimi、智谱、aipaibox 中转、OpenRouter、OpenAI、Anthropic Claude),用别家先选好服务商再填对应 Key。',
     pos: 'top',
   },
   {
