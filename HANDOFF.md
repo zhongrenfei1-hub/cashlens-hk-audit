@@ -3,8 +3,9 @@
 > 给下一个 AI / Claude / Codex 看。新会话开始时，把这份文档贴进去，然后说：
 > “接着这份 HANDOFF.md 继续帮我做 Cashlens，我现在要：[新需求]”。
 
-最后更新：2026-05-08 13:26 CST
+最后更新：2026-05-08 14:35 CST
 当前线上确认版本：`f323390` (`fix: harden report rendering and validation`)
+本地待推送：一键导出 Excel（模板月度矩阵 + 4 张明细 sheet）
 
 ---
 
@@ -17,11 +18,11 @@
 | GitHub 仓库 | https://github.com/zhongrenfei1-hub/cashlens-hk-audit |
 | 部署方式 | GitHub Pages，推送 `main` 后自动部署 |
 | 当前主文件 | `index.html`（单文件前端应用） |
-| 当前本地审查目录 | `/tmp/cashlens-hk-audit-review` |
+| 当前本地工作目录 | `/Users/qiu/海荣香港/99_部署版` |
 | 当前分支 | `main` |
-| 最新提交 | `f323390 fix: harden report rendering and validation` |
+| 最新已推送提交 | `80e1762 docs: update handoff after bug fixes` |
 
-注意：旧版 HANDOFF 里写的本地路径 `/Users/qiu/海荣香港/99_部署版` 已不应视为当前工作路径。当前这次修复是在 `/tmp/cashlens-hk-audit-review` 完成并直接推送到 GitHub。
+注意：上一份 HANDOFF 里的 `/tmp/cashlens-hk-audit-review` 是临时检查目录，已重新切回 `/Users/qiu/海荣香港/99_部署版` 作为正式工作目录（preview server `Cashlens · 部署版` 默认指这里）。
 
 ---
 
@@ -95,7 +96,16 @@
    - 新手教程
    - 追问输入框
    - 项目历史 localStorage
-   - 导出 Markdown / TSV
+   - 导出：Markdown / TSV / **Excel（.xlsx 多 sheet，含模板月度矩阵）**
+
+6. 一键导出 Excel（新）
+   - 顶部 `📊 Excel` 按钮 + artifact 底部 `📊 下载 .xlsx` 按钮。
+   - 用 ExcelJS 4.4.0 CDN 按需懒加载（首次点击约 1s 等待）。
+   - 输出 5 个 sheet：
+     - Sheet 1 `月度矩阵`：紫色 banner / 灰色表头 / 斜体月度数据 / 浅绿 MOVEMENT / 黄色 exchange & SGD 汇率 / 白色 HKD 等值合计 / 红色 BAL 底栏。完整复刻「统计流水模版.xlsx」格式。
+     - Sheet 2-5：从 ```tsv 块还原的 `汇总表` / `有效进账明细` / `已排除明细` / `审计轨迹`，金额列自动数字化 + `#,##0.00` 格式 + 首行冻结。
+   - 月度矩阵优先解析报告里的 Markdown 月度矩阵表（识别 MOVEMENT / exchange / SGD : / HKD : / BAL 各特殊行），缺哪行就自动从其他行算回。HKD 列汇率默认 1。
+   - 公司名取 `companyInput` 输入框，审计期间取 `periodStart / periodEnd`。
 
 ---
 

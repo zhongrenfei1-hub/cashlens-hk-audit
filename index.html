@@ -368,6 +368,10 @@ tailwind.config = {
     <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v2M8 13v2M15 8h-2M3 8H1M12.95 3.05l-1.4 1.4M4.45 11.55l-1.4 1.4M12.95 12.95l-1.4-1.4M4.45 4.45l-1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
   </button>
 
+  <button id="exportXlsxBtn" onclick="downloadXlsx()" disabled class="px-3 py-1.5 rounded-lg bg-elevated border border-subtle text-fg1 text-sm font-medium hover:bg-base disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1.5" title="导出 Excel(模板月度矩阵 + 4 张明细 sheet)">
+    <span>📊</span>
+    Excel
+  </button>
   <button id="exportBtn" onclick="exportReport()" disabled class="px-3 py-1.5 rounded-lg accent-bg text-white text-sm font-medium hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1.5">
     <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M3.5 5.5L7 9l3.5-3.5M2 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     导出
@@ -599,6 +603,9 @@ tailwind.config = {
       </button>
       <button onclick="copyArtifactTsv()" class="px-2.5 py-1.5 rounded-md hover:bg-elevated text-[11.5px] text-fg2 hover:text-fg1 flex items-center gap-1">
         <span>📊</span><span>复制 TSV</span>
+      </button>
+      <button onclick="downloadXlsx()" class="px-2.5 py-1.5 rounded-md hover:bg-elevated text-[11.5px] text-fg2 hover:text-fg1 flex items-center gap-1" title="导出 Excel(模板月度矩阵 + 4 张明细 sheet)">
+        <span>📊</span><span>下载 .xlsx</span>
       </button>
       <div class="flex-1"></div>
       <span id="artifactStatus" class="text-[10.5px] text-fg3 mr-2"></span>
@@ -1891,6 +1898,7 @@ function finalizeAssistant(id, fullText) {
   // Stash latest text for export
   window.__latestReport = fullText;
   document.getElementById('exportBtn').disabled = false;
+  document.getElementById('exportXlsxBtn').disabled = false;
 }
 
 function thinkingDots() {
@@ -2373,6 +2381,368 @@ function downloadTsv(idx, content) {
   a.download = `Sheet${idx+1}_${SHEETS[idx] || 'data'}.tsv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ─────────── Excel export (.xlsx with template-style matrix) ───────────
+const EXCELJS_CDN = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+let __excelJsLoading = null;
+function loadExcelJS() {
+  if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  if (__excelJsLoading) return __excelJsLoading;
+  __excelJsLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = EXCELJS_CDN;
+    s.onload = () => window.ExcelJS ? resolve(window.ExcelJS) : reject(new Error('ExcelJS 未注册到 window'));
+    s.onerror = () => reject(new Error('ExcelJS 加载失败 — 请检查网络'));
+    document.head.appendChild(s);
+  });
+  return __excelJsLoading;
+}
+
+// Strip currency symbols, commas, spaces; tolerate "—" / "-" / "" → 0
+function parseNum(s) {
+  if (s === null || s === undefined) return 0;
+  const cleaned = String(s).replace(/[^\d.\-]/g, '');
+  if (cleaned === '' || cleaned === '-' || cleaned === '.') return 0;
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Locate the monthly balance matrix in the report markdown.
+// Expected shape: a Markdown table whose header includes "日期" and at least
+// one "外币储蓄" column, ending with rows like MOVEMENT / exchange / SGD / HKD / BAL.
+function parseBalanceMatrix(reportText) {
+  if (!reportText) return null;
+  const lines = reportText.split(/\r?\n/);
+  // Find a header line with "日期" + currency columns
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.includes('|')) continue;
+    if (!/日期|月份|date/i.test(line)) continue;
+    if (!/储蓄|HKD|USD|EUR|JPY|SGD|CNY/i.test(line)) continue;
+    // Header parsed
+    const headerCells = line.split('|').map(c => c.trim()).filter(c => c !== '');
+    if (headerCells.length < 3) continue;
+    // Currencies: pull last token of each non-date column
+    const currencies = headerCells.slice(1).map(h => {
+      const m = h.match(/(HKD|USD|EUR|JPY|SGD|CNY|GBP|AUD|JPY|NZD|CAD|CHF)/i);
+      return m ? m[1].toUpperCase() : h;
+    });
+    // Skip the separator line if present (|---|---|)
+    let cursor = i + 1;
+    if (lines[cursor] && /^\s*\|?\s*:?-+/.test(lines[cursor])) cursor++;
+
+    const months = [];
+    let movement = null, exchange = null, hkdRow = null, bal = null;
+    for (; cursor < lines.length; cursor++) {
+      const row = lines[cursor];
+      if (!row.includes('|')) {
+        if (row.trim() === '') continue;
+        break;
+      }
+      const cells = row.split('|').map(c => c.trim());
+      // Drop leading/trailing empty cells from outer pipes
+      if (cells.length && cells[0] === '') cells.shift();
+      if (cells.length && cells[cells.length - 1] === '') cells.pop();
+      if (cells.length === 0) continue;
+      // Skip alignment separator rows
+      if (/^:?-+:?$/.test(cells[0])) continue;
+      const label = cells[0].replace(/\*+/g, '').trim();
+      const values = cells.slice(1, currencies.length + 1).map(parseNum);
+      while (values.length < currencies.length) values.push(0);
+      const upperLabel = label.toUpperCase();
+      if (/^MOVEMENT$/i.test(label)) {
+        movement = values;
+      } else if (/exchange/i.test(label) || /^汇率/.test(label)) {
+        exchange = values;
+      } else if (/^SGD\s*[::]?$/i.test(label)) {
+        // Sometimes the rate row is labelled "SGD :"
+        if (!exchange) exchange = values;
+      } else if (/^HKD\s*[::]?$/i.test(label)) {
+        hkdRow = values;
+      } else if (/BAL/i.test(label) || /BAL/i.test(row)) {
+        // BAL: 港幣 HKD 40,865,992.88 — pull the largest number on the line
+        const nums = row.match(/-?\d[\d,]*\.?\d*/g) || [];
+        bal = nums.map(n => parseNum(n)).reduce((a, b) => Math.abs(b) > Math.abs(a) ? b : a, 0);
+        cursor++;
+        break;
+      } else if (label && values.some(v => v !== 0) || /^\w{3}-\d{2}/.test(label)) {
+        // Treat as month row if label looks like a date or it has numbers
+        months.push({ label, values });
+      } else if (label) {
+        months.push({ label, values });
+      }
+    }
+
+    if (months.length === 0 && !movement) continue; // false header, keep searching
+
+    // Compute movement if missing
+    if (!movement) {
+      movement = currencies.map((_, j) => months.reduce((a, m) => a + (m.values[j] || 0), 0));
+    }
+    // Default exchange row
+    if (!exchange) exchange = currencies.map(c => c === 'HKD' ? 1 : 0);
+    // Compute HKD row if missing
+    if (!hkdRow) hkdRow = currencies.map((_, j) => +(movement[j] * (exchange[j] || (currencies[j] === 'HKD' ? 1 : 0))).toFixed(2));
+    if (bal === null) bal = hkdRow.reduce((a, b) => a + b, 0);
+
+    return { currencies, months, movement, exchange, hkdRow, bal };
+  }
+  return null;
+}
+
+// Sheet 1 — template-style monthly currency matrix
+function buildMatrixSheet(wb, matrix, meta) {
+  const ws = wb.addWorksheet('月度矩阵', { views: [{ showGridLines: false }] });
+  const { currencies, months, movement, exchange, hkdRow, bal } = matrix;
+  const nCols = 1 + currencies.length;
+
+  // Column widths
+  ws.getColumn(1).width = 14;
+  for (let c = 2; c <= nCols; c++) ws.getColumn(c).width = 17;
+
+  const PURPLE = 'FF6B2C91', WHITE = 'FFFFFFFF', GRAY = 'FFE7E6E6', ZEBRA = 'FFF2F2F2';
+  const GREEN = 'FFC6EFCE', GREEN_TXT = 'FF006100', YELLOW = 'FFFFFF00', RED = 'FFC00000';
+  const thin = { style: 'thin', color: { argb: 'FF000000' } };
+  const fullBorder = { top: thin, left: thin, right: thin, bottom: thin };
+
+  // Row 1: company banner
+  ws.mergeCells(1, 1, 1, nCols);
+  const banner = ws.getCell(1, 1);
+  banner.value = meta.company || '月度多币种余额表';
+  banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PURPLE } };
+  banner.font = { bold: true, size: 14, color: { argb: WHITE } };
+  banner.alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.getRow(1).height = 30;
+
+  // Row 2: 成立日期
+  ws.getCell(2, 1).value = '成立日期';
+  ws.getCell(2, 2).value = meta.incorporationDate || '';
+  // Row 3: 审计期间
+  ws.getCell(3, 1).value = '审计期间';
+  ws.getCell(3, 2).value = meta.auditPeriod || '';
+  for (const r of [2, 3]) {
+    ws.getCell(r, 1).font = { size: 10 };
+    ws.getCell(r, 2).font = { size: 10 };
+  }
+
+  // Row 4: column headers
+  const headerRow = 4;
+  const headerLabels = ['日期DATE', ...currencies.map(c => (c === 'HKD' ? '港币储蓄  ' : '外币储蓄  ') + c)];
+  headerLabels.forEach((text, idx) => {
+    const cell = ws.getCell(headerRow, idx + 1);
+    cell.value = text;
+    cell.font = { bold: true, size: 10 };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRAY } };
+    cell.border = fullBorder;
+  });
+  ws.getRow(headerRow).height = 24;
+
+  // Monthly rows
+  let rowIdx = headerRow + 1;
+  months.forEach((m, i) => {
+    const zebra = i % 2 === 1;
+    const dateCell = ws.getCell(rowIdx, 1);
+    dateCell.value = m.label;
+    dateCell.font = { italic: true, size: 10 };
+    dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    dateCell.border = fullBorder;
+    if (zebra) dateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ZEBRA } };
+    currencies.forEach((_, j) => {
+      const cell = ws.getCell(rowIdx, 2 + j);
+      cell.value = m.values[j] || 0;
+      cell.numFmt = '#,##0.00';
+      cell.alignment = { horizontal: 'right', vertical: 'middle' };
+      cell.font = { italic: true, size: 10 };
+      cell.border = fullBorder;
+      if (zebra) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ZEBRA } };
+    });
+    ws.getRow(rowIdx).height = 18;
+    rowIdx++;
+  });
+
+  // MOVEMENT row (green)
+  const mvLabel = ws.getCell(rowIdx, 1);
+  mvLabel.value = 'MOVEMENT';
+  mvLabel.font = { bold: true, italic: true, size: 10, color: { argb: GREEN_TXT } };
+  mvLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREEN } };
+  mvLabel.alignment = { horizontal: 'center', vertical: 'middle' };
+  mvLabel.border = fullBorder;
+  currencies.forEach((_, j) => {
+    const cell = ws.getCell(rowIdx, 2 + j);
+    cell.value = +(movement[j] || 0).toFixed(2);
+    cell.numFmt = '#,##0.00';
+    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+    cell.font = { bold: true, italic: true, size: 10, color: { argb: GREEN_TXT } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREEN } };
+    cell.border = fullBorder;
+  });
+  ws.getRow(rowIdx).height = 20;
+  rowIdx++;
+
+  // exchange label row (yellow, HKD col blank)
+  ws.getCell(rowIdx, 1).border = fullBorder;
+  currencies.forEach((cur, j) => {
+    const cell = ws.getCell(rowIdx, 2 + j);
+    cell.border = fullBorder;
+    if (cur !== 'HKD') {
+      cell.value = 'exchange';
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.font = { italic: true, size: 10 };
+    }
+  });
+  ws.getRow(rowIdx).height = 18;
+  rowIdx++;
+
+  // SGD rate row (yellow on foreign columns)
+  const sgdLabel = ws.getCell(rowIdx, 1);
+  sgdLabel.value = 'SGD :';
+  sgdLabel.font = { bold: true, size: 10 };
+  sgdLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+  sgdLabel.border = fullBorder;
+  currencies.forEach((cur, j) => {
+    const cell = ws.getCell(rowIdx, 2 + j);
+    cell.border = fullBorder;
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    if (cur !== 'HKD') {
+      cell.value = exchange[j] || 0;
+      cell.numFmt = '0.#####';
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW } };
+      cell.font = { size: 10 };
+    }
+  });
+  ws.getRow(rowIdx).height = 20;
+  rowIdx++;
+
+  // HKD totals row
+  const hkdLabel = ws.getCell(rowIdx, 1);
+  hkdLabel.value = 'HKD :';
+  hkdLabel.font = { bold: true, size: 10 };
+  hkdLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+  hkdLabel.border = fullBorder;
+  currencies.forEach((_, j) => {
+    const cell = ws.getCell(rowIdx, 2 + j);
+    cell.value = +(hkdRow[j] || 0).toFixed(2);
+    cell.numFmt = '#,##0.00';
+    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+    cell.font = { bold: true, size: 10 };
+    cell.border = fullBorder;
+  });
+  ws.getRow(rowIdx).height = 20;
+  rowIdx++;
+
+  // Red BAL footer
+  ws.mergeCells(rowIdx, 1, rowIdx, nCols);
+  const balCell = ws.getCell(rowIdx, 1);
+  const fmtBal = Number(bal || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  balCell.value = `BAL :    港币HKD    ${fmtBal}`;
+  balCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: RED } };
+  balCell.font = { bold: true, size: 14, color: { argb: WHITE } };
+  balCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.getRow(rowIdx).height = 32;
+}
+
+// Plain TSV → sheet, with bold header + autosize-ish widths
+function buildTsvSheet(wb, name, tsvText) {
+  const ws = wb.addWorksheet(name);
+  const lines = tsvText.split(/\r?\n/).filter(l => l.length);
+  if (!lines.length) return;
+  const rows = lines.map(l => l.split('\t'));
+  const headers = rows[0];
+  const data = rows.slice(1);
+
+  ws.addRow(headers);
+  const headerRow = ws.getRow(1);
+  headerRow.font = { bold: true, size: 11 };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7E6E6' } };
+  headerRow.alignment = { vertical: 'middle' };
+
+  data.forEach(r => {
+    const coerced = r.map(cell => {
+      const trimmed = String(cell).trim();
+      if (trimmed === '') return '';
+      // Numeric coercion when the cell is a clean number
+      if (/^-?[\d,]+(\.\d+)?$/.test(trimmed)) {
+        const n = Number(trimmed.replace(/,/g, ''));
+        if (Number.isFinite(n)) return n;
+      }
+      return cell;
+    });
+    ws.addRow(coerced);
+  });
+
+  // Column widths: max(header, longest data string up to 40)
+  headers.forEach((h, i) => {
+    let max = String(h).length;
+    for (const r of data) {
+      const v = r[i] !== undefined ? String(r[i]) : '';
+      if (v.length > max) max = v.length;
+    }
+    ws.getColumn(i + 1).width = Math.min(Math.max(max + 2, 8), 40);
+  });
+
+  // Numeric format for columns whose header looks like an amount
+  headers.forEach((h, i) => {
+    if (/金额|HKD|amount|进账|排除|净|余额|汇率/i.test(h)) {
+      ws.getColumn(i + 1).numFmt = '#,##0.00';
+    }
+  });
+
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+}
+
+async function downloadXlsx() {
+  if (!window.__latestReport) { toast('暂无报告', 'warn'); return; }
+  toast('生成 Excel 中…', 'info');
+  try {
+    const ExcelJS = await loadExcelJS();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Cashlens HK Audit';
+    wb.created = new Date();
+
+    // Sheet 1: template-style monthly matrix (best-effort parse)
+    const matrix = parseBalanceMatrix(window.__latestReport);
+    const meta = {
+      company: (document.getElementById('companyInput')?.value || '').trim(),
+      incorporationDate: '',
+      auditPeriod: [
+        document.getElementById('periodStart')?.value,
+        document.getElementById('periodEnd')?.value,
+      ].filter(Boolean).join(' — ')
+    };
+    if (matrix) {
+      buildMatrixSheet(wb, matrix, meta);
+    }
+
+    // Sheets 2-5: 4 TSV blocks
+    const tsvBlocks = [...window.__latestReport.matchAll(/```tsv\s*\n([\s\S]*?)```/g)];
+    const NAMES = ['汇总表', '有效进账明细', '已排除明细', '审计轨迹'];
+    tsvBlocks.forEach((m, i) => {
+      buildTsvSheet(wb, NAMES[i] || `Sheet ${i + 1}`, m[1].trim());
+    });
+
+    if (!matrix && tsvBlocks.length === 0) {
+      toast('报告里既没有月度矩阵也没有 TSV 数据,无法生成 Excel', 'warn');
+      return;
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-report-${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    const note = matrix ? `已下载 .xlsx (${tsvBlocks.length + 1} 个 sheet)` : `已下载 .xlsx (${tsvBlocks.length} 个 sheet,未识别月度矩阵)`;
+    toast(note, 'ok');
+  } catch (err) {
+    console.error(err);
+    toast('生成失败:' + (err.message || err), 'err');
+  }
 }
 
 // ─────────── Markdown rendering (lightweight) ───────────
@@ -2890,6 +3260,7 @@ ${fileList}`;
       updateCostChip(usage);
       window.__latestReport = fullText;
       document.getElementById('exportBtn').disabled = false;
+      document.getElementById('exportXlsxBtn').disabled = false;
       saveProject({ company, periodStart, periodEnd, fullText, usage, files: stagedFiles.map(f => f.file.name) });
       // Save messages for follow-ups (provider-aware shape)
       const provider2 = getProviderConfig();
@@ -3136,6 +3507,7 @@ function loadProject(id) {
   document.getElementById('periodEnd').value = p.periodEnd;
   window.__latestReport = p.fullText;
   document.getElementById('exportBtn').disabled = false;
+  document.getElementById('exportXlsxBtn').disabled = false;
   toast('已加载历史项目', 'ok');
 }
 
@@ -3145,6 +3517,7 @@ function newSession() {
   document.getElementById('emptyState').classList.remove('hidden');
   document.getElementById('composer').classList.add('hidden');
   document.getElementById('exportBtn').disabled = true;
+  document.getElementById('exportXlsxBtn').disabled = true;
   window.__latestReport = '';
   ['artifactReportTab','artifactChartsTab','artifactTablesTab','artifactCitationsTab'].forEach(id => {
     const el = document.getElementById(id);
@@ -3278,7 +3651,7 @@ const TOUR_STEPS = [
   {
     sel: '#exportBtn',
     title: '📥 第 5 步:导出',
-    body: '右上角紫色「导出」按钮 = 下载完整 Markdown 报告。<br><br>报告完成后,左侧聊天区还会显示:<br>• 📋 复制全文<br>• 📥 下载 .md<br>• 📊 复制全部 TSV(粘到 Excel 模版)<br><br>右侧 artifact 底部工具栏也有同样按钮。',
+    body: '右上角两个按钮:<br>• 📊 <b>Excel</b> = 一键下载 .xlsx(模板月度矩阵 + 4 张明细 sheet,直接交审计师)<br>• 📥 <b>导出</b> = 下载完整 Markdown 报告<br><br>报告完成后,聊天区和 artifact 底部还有 复制全文 / 下载 .md / 复制 TSV / 下载 .xlsx 等按钮,看哪个顺手用哪个。',
     pos: 'bottom',
   },
   {
