@@ -1,0 +1,22 @@
+# Cashlens · DeepSeek 反代 Worker 配置
+# 这个文件是给熟悉 wrangler CLI 的人用的;
+# 普通用户建议直接走 Cloudflare 网页 Dashboard 部署(见 README.md),不需要装 wrangler。
+
+name = "cashlens-deepseek-proxy"
+main = "worker.js"
+compatibility_date = "2025-04-01"
+
+# 部署后的 URL 形如 https://cashlens-deepseek-proxy.<your-subdomain>.workers.dev
+# workers_dev 默认开启,首次 deploy 会自动给一个免费 *.workers.dev 二级域
+
+# ─────────────────────────────────────────────
+# 环境变量
+# ─────────────────────────────────────────────
+# DEEPSEEK_API_KEY 必须配置成 secret(不在文件里),用以下任一方式:
+#   1. wrangler secret put DEEPSEEK_API_KEY     ← CLI
+#   2. Cloudflare Dashboard → Worker → Settings → Variables → Add variable → Type=Secret
+#
+# 可选:扩展 Origin 白名单(默认已含 zhongrenfei1-hub.github.io 和 localhost)
+# [vars]
+# ALLOWED_ORIGINS = "https://example.com,https://another-domain.com"
+# DEBUG = "0"
