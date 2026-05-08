@@ -2013,7 +2013,7 @@ function buildChartOption(spec) {
     title: {
       text: spec.title || '',
       subtext: spec.subtitle || '',
-      textStyle: { color: '#fafafa', fontSize: 14, fontWeight: 500, fontFamily: 'Inter' },
+      textStyle: { color: '#fafafa', fontSize: 13, fontWeight: 500, fontFamily: 'Inter' },
       subtextStyle: { color: '#999', fontSize: 11 },
       padding: [8, 16],
     },
@@ -2026,7 +2026,8 @@ function buildChartOption(spec) {
     color: colors,
     backgroundColor: 'transparent',
     textStyle: { color: '#cfcfcf', fontFamily: 'Inter' },
-    grid: { top: 60, left: 60, right: 24, bottom: 50, containLabel: true },
+    // top: 80 给标题 + 副标题留够空间;bottom 留够 x 轴 rotate 时的高度
+    grid: { top: 80, left: 60, right: 24, bottom: 60, containLabel: true },
   };
 
   const data = spec.data || [];
@@ -2034,13 +2035,17 @@ function buildChartOption(spec) {
   if (spec.type === 'pie' || spec.type === 'doughnut') {
     return {
       ...baseOption,
+      grid: undefined,
+      legend: { type: 'scroll', bottom: 0, textStyle: { color: '#cfcfcf', fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
       series: [{
         type: 'pie',
-        radius: spec.type === 'doughnut' ? ['50%', '78%'] : ['0%', '78%'],
-        center: ['50%', '55%'],
+        radius: spec.type === 'doughnut' ? ['45%', '70%'] : ['0%', '70%'],
+        center: ['50%', '50%'],
         data: data.map((d, i) => ({ name: d.label, value: d.value, itemStyle: { color: colors[i % colors.length] } })),
-        label: { color: '#fafafa', fontSize: 11 },
-        labelLine: { lineStyle: { color: '#666' } },
+        // avoidLabelOverlap 让 ECharts 自动错开重叠的标签
+        avoidLabelOverlap: true,
+        label: { color: '#fafafa', fontSize: 11, formatter: '{b}\n{d}%' },
+        labelLine: { lineStyle: { color: '#666' }, length: 8, length2: 8 },
       }],
     };
   }
@@ -2048,9 +2053,17 @@ function buildChartOption(spec) {
   if (spec.type === 'horizontal-bar') {
     return {
       ...baseOption,
-      grid: { ...baseOption.grid, left: 110 },
+      // 长公司名(如 "HK GANG SHENG WEN TOU TECH CO., LIMITED")需要更宽的 y 轴空间
+      grid: { ...baseOption.grid, left: 140 },
       xAxis: { type: 'value', axisLine: { lineStyle: { color: '#444' } }, splitLine: { lineStyle: { color: '#222' } }, axisLabel: { color: '#999' }, name: spec.x_axis || '', nameTextStyle: { color: '#999' } },
-      yAxis: { type: 'category', data: data.map(d => d.label), axisLine: { lineStyle: { color: '#444' } }, axisLabel: { color: '#cfcfcf', fontSize: 11 }, inverse: true },
+      yAxis: {
+        type: 'category', data: data.map(d => d.label),
+        axisLine: { lineStyle: { color: '#444' } },
+        // 超过 14 字符截断成 "前 12 字…",鼠标 hover 时由 tooltip 显示完整名
+        axisLabel: { color: '#cfcfcf', fontSize: 11, width: 130, overflow: 'truncate', ellipsis: '…' },
+        inverse: true,
+      },
+      tooltip: { ...baseOption.tooltip, formatter: (p) => `<b>${p.name}</b><br/>${p.marker}${p.seriesName || ''} ${p.value.toLocaleString('en-US', { maximumFractionDigits: 0 })}` },
       series: [{ type: 'bar', data: data.map((d,i) => ({ value: d.value, itemStyle: { color: colors[i % colors.length], borderRadius: [0, 4, 4, 0] } })), barWidth: '60%' }],
     };
   }
@@ -2107,9 +2120,17 @@ function buildChartOption(spec) {
   }
 
   // Default: bar
+  // rotate 阈值改成 4(原来 6 太宽松,5-6 个数据时长 label 已经会挤);
+  // 同时给 axisLabel 加宽度 + 截断,避免 label 顶到 x 轴外面
+  const rotate = data.length > 4 ? 30 : 0;
   return {
     ...baseOption,
-    xAxis: { type: 'category', data: data.map(d => d.label), axisLine: { lineStyle: { color: '#444' } }, axisLabel: { color: '#cfcfcf', rotate: data.length > 6 ? 30 : 0 }, name: spec.x_axis || '', nameTextStyle: { color: '#999' } },
+    xAxis: {
+      type: 'category', data: data.map(d => d.label),
+      axisLine: { lineStyle: { color: '#444' } },
+      axisLabel: { color: '#cfcfcf', rotate, fontSize: 11, width: rotate ? 80 : 70, overflow: 'truncate', ellipsis: '…' },
+      name: spec.x_axis || '', nameTextStyle: { color: '#999' },
+    },
     yAxis: { type: 'value', axisLine: { lineStyle: { color: '#444' } }, splitLine: { lineStyle: { color: '#222' } }, axisLabel: { color: '#999' }, name: spec.y_axis || '', nameTextStyle: { color: '#999' } },
     series: [{ type: 'bar', data: data.map((d,i) => ({ value: d.value, itemStyle: { color: colors[i % colors.length], borderRadius: [4, 4, 0, 0] } })), barWidth: '55%' }],
   };
