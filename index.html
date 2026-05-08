@@ -368,10 +368,32 @@ tailwind.config = {
     <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v2M8 13v2M15 8h-2M3 8H1M12.95 3.05l-1.4 1.4M4.45 11.55l-1.4 1.4M12.95 12.95l-1.4-1.4M4.45 4.45l-1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
   </button>
 
-  <button id="exportXlsxBtn" onclick="downloadXlsx()" disabled class="px-3 py-1.5 rounded-lg bg-elevated border border-subtle text-fg1 text-sm font-medium hover:bg-base disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1.5" title="导出 Excel(模板月度矩阵 + 4 张明细 sheet)">
-    <span>📊</span>
-    Excel
-  </button>
+  <div class="relative">
+    <button id="exportXlsxBtn" onclick="toggleXlsxMenu(event)" disabled class="px-3 py-1.5 rounded-lg bg-elevated border border-subtle text-fg1 text-sm font-medium hover:bg-base disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1.5" title="导出 Excel · 选模板">
+      <span>📊</span>
+      Excel
+      <span class="text-[10px] opacity-70">▾</span>
+    </button>
+    <div id="xlsxMenu" class="hidden absolute right-0 top-full mt-1.5 bg-surface border border-subtle rounded-lg shadow-2xl py-1 min-w-[280px] z-[100]">
+      <div class="px-3 py-1.5 text-[10px] text-fg3 uppercase tracking-wider border-b border-subtle">选模板下载</div>
+      <button onclick="downloadXlsx('purple')" class="w-full text-left px-3 py-2 hover:bg-elevated text-[12px]">
+        <div class="text-fg1 font-medium">🟣 紫色 banner(默认)</div>
+        <div class="text-[10.5px] text-fg3 mt-0.5">原版「统计流水模版」风格</div>
+      </button>
+      <button onclick="downloadXlsx('minimal')" class="w-full text-left px-3 py-2 hover:bg-elevated text-[12px]">
+        <div class="text-fg1 font-medium">⬜ 极简黑白</div>
+        <div class="text-[10.5px] text-fg3 mt-0.5">无配色,适合打印 / 扫描归档</div>
+      </button>
+      <button onclick="downloadXlsx('blue')" class="w-full text-left px-3 py-2 hover:bg-elevated text-[12px]">
+        <div class="text-fg1 font-medium">🔵 专业蓝白</div>
+        <div class="text-[10.5px] text-fg3 mt-0.5">深蓝企业风,适合上市公司 / 大客户</div>
+      </button>
+      <button onclick="downloadXlsx('monthlyTabs')" class="w-full text-left px-3 py-2 hover:bg-elevated text-[12px] border-t border-subtle">
+        <div class="text-fg1 font-medium">📅 月度分 sheet 详细</div>
+        <div class="text-[10.5px] text-fg3 mt-0.5">紫色总览 + 每月一张明细 sheet</div>
+      </button>
+    </div>
+  </div>
   <button id="exportBtn" onclick="exportReport()" disabled class="px-3 py-1.5 rounded-lg accent-bg text-white text-sm font-medium hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1.5">
     <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M3.5 5.5L7 9l3.5-3.5M2 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     导出
@@ -2459,33 +2481,70 @@ function parseBalanceMatrix(reportText) {
 }
 
 // Sheet 1 — template-style monthly currency matrix
-function buildMatrixSheet(wb, matrix, meta) {
+// ─── 4 套 Excel 视觉主题 ───
+// 客户喜欢哪种留哪种,后续删掉其余即可。
+const XLSX_THEMES = {
+  purple: {
+    label: '🟣 紫色 banner(默认)',
+    sub: '原版「统计流水模版」风格',
+    bannerBg: 'FF6B2C91', bannerFg: 'FFFFFFFF',
+    headerBg: 'FFE7E6E6', headerFg: 'FF000000',
+    zebraBg:  'FFF2F2F2',
+    movementBg: 'FFC6EFCE', movementFg: 'FF006100',
+    yellowBg: 'FFFFFF00',
+    balBg: 'FFC00000', balFg: 'FFFFFFFF',
+    italic: true,
+  },
+  minimal: {
+    label: '⬜ 极简黑白',
+    sub: '无配色,适合打印/扫描归档',
+    bannerBg: 'FFFFFFFF', bannerFg: 'FF000000',
+    headerBg: 'FFF2F2F2', headerFg: 'FF000000',
+    zebraBg:  null,
+    movementBg: 'FFFFFFFF', movementFg: 'FF000000',
+    yellowBg: 'FFFAFAFA',
+    balBg: 'FFFFFFFF', balFg: 'FF000000',
+    italic: false,
+  },
+  blue: {
+    label: '🔵 专业蓝白',
+    sub: '深蓝企业风,适合上市公司 / 大客户',
+    bannerBg: 'FF1F3864', bannerFg: 'FFFFFFFF',
+    headerBg: 'FFD9E1F2', headerFg: 'FF1F3864',
+    zebraBg:  'FFEFF3FA',
+    movementBg: 'FFBDD7EE', movementFg: 'FF1F3864',
+    yellowBg: 'FFFFF2CC',
+    balBg: 'FF1F3864', balFg: 'FFFFFFFF',
+    italic: false,
+  },
+};
+
+function buildMatrixSheet(wb, matrix, meta, themeKey = 'purple') {
+  const theme = XLSX_THEMES[themeKey] || XLSX_THEMES.purple;
   const ws = wb.addWorksheet('月度矩阵', { views: [{ showGridLines: false }] });
   const { currencies, months, movement, exchange, hkdRow, bal } = matrix;
   const nCols = 1 + currencies.length;
 
-  // Column widths
   ws.getColumn(1).width = 14;
   for (let c = 2; c <= nCols; c++) ws.getColumn(c).width = 17;
 
-  const PURPLE = 'FF6B2C91', WHITE = 'FFFFFFFF', GRAY = 'FFE7E6E6', ZEBRA = 'FFF2F2F2';
-  const GREEN = 'FFC6EFCE', GREEN_TXT = 'FF006100', YELLOW = 'FFFFFF00', RED = 'FFC00000';
   const thin = { style: 'thin', color: { argb: 'FF000000' } };
   const fullBorder = { top: thin, left: thin, right: thin, bottom: thin };
+  const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
 
-  // Row 1: company banner
+  // Row 1: banner
   ws.mergeCells(1, 1, 1, nCols);
   const banner = ws.getCell(1, 1);
   banner.value = meta.company || '月度多币种余额表';
-  banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PURPLE } };
-  banner.font = { bold: true, size: 14, color: { argb: WHITE } };
+  banner.fill = fill(theme.bannerBg);
+  banner.font = { bold: true, size: 14, color: { argb: theme.bannerFg } };
   banner.alignment = { horizontal: 'center', vertical: 'middle' };
+  if (themeKey === 'minimal') banner.border = fullBorder;
   ws.getRow(1).height = 30;
 
-  // Row 2: 成立日期
+  // Rows 2-3: metadata
   ws.getCell(2, 1).value = '成立日期';
   ws.getCell(2, 2).value = meta.incorporationDate || '';
-  // Row 3: 审计期间
   ws.getCell(3, 1).value = '审计期间';
   ws.getCell(3, 2).value = meta.auditPeriod || '';
   for (const r of [2, 3]) {
@@ -2499,9 +2558,9 @@ function buildMatrixSheet(wb, matrix, meta) {
   headerLabels.forEach((text, idx) => {
     const cell = ws.getCell(headerRow, idx + 1);
     cell.value = text;
-    cell.font = { bold: true, size: 10 };
+    cell.font = { bold: true, size: 10, color: { argb: theme.headerFg } };
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRAY } };
+    cell.fill = fill(theme.headerBg);
     cell.border = fullBorder;
   });
   ws.getRow(headerRow).height = 24;
@@ -2509,31 +2568,31 @@ function buildMatrixSheet(wb, matrix, meta) {
   // Monthly rows
   let rowIdx = headerRow + 1;
   months.forEach((m, i) => {
-    const zebra = i % 2 === 1;
+    const zebra = i % 2 === 1 && theme.zebraBg;
     const dateCell = ws.getCell(rowIdx, 1);
     dateCell.value = m.label;
-    dateCell.font = { italic: true, size: 10 };
+    dateCell.font = { italic: theme.italic, size: 10 };
     dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
     dateCell.border = fullBorder;
-    if (zebra) dateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ZEBRA } };
+    if (zebra) dateCell.fill = fill(theme.zebraBg);
     currencies.forEach((_, j) => {
       const cell = ws.getCell(rowIdx, 2 + j);
       cell.value = m.values[j] || 0;
       cell.numFmt = '#,##0.00';
       cell.alignment = { horizontal: 'right', vertical: 'middle' };
-      cell.font = { italic: true, size: 10 };
+      cell.font = { italic: theme.italic, size: 10 };
       cell.border = fullBorder;
-      if (zebra) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ZEBRA } };
+      if (zebra) cell.fill = fill(theme.zebraBg);
     });
     ws.getRow(rowIdx).height = 18;
     rowIdx++;
   });
 
-  // MOVEMENT row (green)
+  // MOVEMENT row
   const mvLabel = ws.getCell(rowIdx, 1);
   mvLabel.value = 'MOVEMENT';
-  mvLabel.font = { bold: true, italic: true, size: 10, color: { argb: GREEN_TXT } };
-  mvLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREEN } };
+  mvLabel.font = { bold: true, italic: theme.italic, size: 10, color: { argb: theme.movementFg } };
+  mvLabel.fill = fill(theme.movementBg);
   mvLabel.alignment = { horizontal: 'center', vertical: 'middle' };
   mvLabel.border = fullBorder;
   currencies.forEach((_, j) => {
@@ -2541,29 +2600,29 @@ function buildMatrixSheet(wb, matrix, meta) {
     cell.value = +(movement[j] || 0).toFixed(2);
     cell.numFmt = '#,##0.00';
     cell.alignment = { horizontal: 'right', vertical: 'middle' };
-    cell.font = { bold: true, italic: true, size: 10, color: { argb: GREEN_TXT } };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREEN } };
+    cell.font = { bold: true, italic: theme.italic, size: 10, color: { argb: theme.movementFg } };
+    cell.fill = fill(theme.movementBg);
     cell.border = fullBorder;
   });
   ws.getRow(rowIdx).height = 20;
   rowIdx++;
 
-  // exchange label row (yellow, HKD col blank)
+  // exchange label row
   ws.getCell(rowIdx, 1).border = fullBorder;
   currencies.forEach((cur, j) => {
     const cell = ws.getCell(rowIdx, 2 + j);
     cell.border = fullBorder;
     if (cur !== 'HKD') {
       cell.value = 'exchange';
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW } };
+      cell.fill = fill(theme.yellowBg);
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.font = { italic: true, size: 10 };
+      cell.font = { italic: theme.italic, size: 10 };
     }
   });
   ws.getRow(rowIdx).height = 18;
   rowIdx++;
 
-  // SGD rate row (yellow on foreign columns)
+  // SGD rate row
   const sgdLabel = ws.getCell(rowIdx, 1);
   sgdLabel.value = 'SGD :';
   sgdLabel.font = { bold: true, size: 10 };
@@ -2576,7 +2635,7 @@ function buildMatrixSheet(wb, matrix, meta) {
     if (cur !== 'HKD') {
       cell.value = exchange[j] || 0;
       cell.numFmt = '0.#####';
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: YELLOW } };
+      cell.fill = fill(theme.yellowBg);
       cell.font = { size: 10 };
     }
   });
@@ -2600,15 +2659,91 @@ function buildMatrixSheet(wb, matrix, meta) {
   ws.getRow(rowIdx).height = 20;
   rowIdx++;
 
-  // Red BAL footer
+  // BAL footer
   ws.mergeCells(rowIdx, 1, rowIdx, nCols);
   const balCell = ws.getCell(rowIdx, 1);
   const fmtBal = Number(bal || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   balCell.value = `BAL :    港币HKD    ${fmtBal}`;
-  balCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: RED } };
-  balCell.font = { bold: true, size: 14, color: { argb: WHITE } };
+  balCell.fill = fill(theme.balBg);
+  balCell.font = { bold: true, size: 14, color: { argb: theme.balFg } };
   balCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  if (themeKey === 'minimal') balCell.border = fullBorder;
   ws.getRow(rowIdx).height = 32;
+}
+
+// 月度详细模板:在矩阵基础上,从 ```tsv Sheet 2 (有效进账明细) 按月份拆 sheet
+function addMonthlyDetailSheets(wb, reportText) {
+  const tsvBlocks = [...(reportText || '').matchAll(/```tsv\s*\n([\s\S]*?)```/g)];
+  if (tsvBlocks.length < 2) return 0;
+  const sheet2 = tsvBlocks[1][1].trim();
+  const lines = sheet2.split(/\r?\n/).filter(l => l.length);
+  if (lines.length < 2) return 0;
+  const headers = lines[0].split('\t');
+  const dateIdx = headers.findIndex(h => /日期|date/i.test(h));
+  if (dateIdx === -1) return 0;
+
+  const byMonth = {};
+  lines.slice(1).forEach(line => {
+    const cells = line.split('\t');
+    const date = (cells[dateIdx] || '').trim();
+    const m = date.match(/(\d{4})[-/.](\d{1,2})/);
+    if (!m) return;
+    const key = `${m[1]}-${m[2].padStart(2, '0')}`;
+    (byMonth[key] = byMonth[key] || []).push(cells);
+  });
+
+  const months = Object.keys(byMonth).sort();
+  months.forEach(month => {
+    const ws = wb.addWorksheet(month, { views: [{ showGridLines: false }] });
+    // Title
+    ws.mergeCells(1, 1, 1, headers.length);
+    const t = ws.getCell(1, 1);
+    t.value = `${month} · 有效进账明细 (${byMonth[month].length} 笔)`;
+    t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF6B2C91' } };
+    t.font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+    t.alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(1).height = 26;
+    // Headers
+    headers.forEach((h, i) => {
+      const c = ws.getCell(2, i + 1);
+      c.value = h;
+      c.font = { bold: true, size: 10 };
+      c.alignment = { horizontal: 'center', vertical: 'middle' };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7E6E6' } };
+    });
+    ws.getRow(2).height = 20;
+    // Data
+    byMonth[month].forEach((row, i) => {
+      row.forEach((v, j) => {
+        const c = ws.getCell(3 + i, j + 1);
+        const trimmed = String(v || '').trim();
+        if (/^-?[\d,]+(\.\d+)?$/.test(trimmed) && trimmed !== '') {
+          const n = Number(trimmed.replace(/,/g, ''));
+          if (Number.isFinite(n)) {
+            c.value = n;
+            c.numFmt = '#,##0.00';
+            c.alignment = { horizontal: 'right', vertical: 'middle' };
+          } else {
+            c.value = v;
+          }
+        } else {
+          c.value = v;
+        }
+        c.font = { size: 10 };
+      });
+    });
+    // Auto column widths (approximate)
+    headers.forEach((h, i) => {
+      let max = String(h).length;
+      byMonth[month].forEach(r => {
+        const v = r[i] !== undefined ? String(r[i]) : '';
+        if (v.length > max) max = v.length;
+      });
+      ws.getColumn(i + 1).width = Math.min(Math.max(max + 2, 8), 36);
+    });
+    ws.views = [{ state: 'frozen', ySplit: 2 }];
+  });
+  return months.length;
 }
 
 // Plain TSV → sheet, with bold header + autosize-ish widths
@@ -2660,16 +2795,32 @@ function buildTsvSheet(wb, name, tsvText) {
   ws.views = [{ state: 'frozen', ySplit: 1 }];
 }
 
-async function downloadXlsx() {
+// 顶部 Excel 下拉菜单 toggle + 外部点击关闭
+function toggleXlsxMenu(e) {
+  e?.stopPropagation();
+  const btn = document.getElementById('exportXlsxBtn');
+  if (btn?.disabled) return;
+  document.getElementById('xlsxMenu')?.classList.toggle('hidden');
+}
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('xlsxMenu');
+  const btn = document.getElementById('exportXlsxBtn');
+  if (!menu || menu.classList.contains('hidden')) return;
+  if (menu.contains(e.target) || btn?.contains(e.target)) return;
+  menu.classList.add('hidden');
+});
+
+async function downloadXlsx(template = 'purple') {
   if (!window.__latestReport) { toast('暂无报告', 'warn'); return; }
-  toast('生成 Excel 中…', 'info');
+  // 关闭可能打开的下拉菜单
+  document.getElementById('xlsxMenu')?.classList.add('hidden');
+  toast(`生成 Excel (${(XLSX_THEMES[template] || XLSX_THEMES.purple).label.replace(/^\S+\s/, '')})…`, 'info');
   try {
     const ExcelJS = await loadExcelJS();
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Cashlens HK Audit';
     wb.created = new Date();
 
-    // Sheet 1: template-style monthly matrix (best-effort parse)
     const matrix = parseBalanceMatrix(window.__latestReport);
     const meta = {
       company: (document.getElementById('companyInput')?.value || '').trim(),
@@ -2679,11 +2830,19 @@ async function downloadXlsx() {
         document.getElementById('periodEnd')?.value,
       ].filter(Boolean).join(' — ')
     };
+
+    // Sheet 1: 月度矩阵(主题驱动)
+    let extraMonthlySheets = 0;
     if (matrix) {
-      buildMatrixSheet(wb, matrix, meta);
+      const matrixTheme = template === 'monthlyTabs' ? 'purple' : template;
+      buildMatrixSheet(wb, matrix, meta, matrixTheme);
+      // monthlyTabs 模板:在矩阵之后追加每月一个详细 sheet
+      if (template === 'monthlyTabs') {
+        extraMonthlySheets = addMonthlyDetailSheets(wb, window.__latestReport);
+      }
     }
 
-    // Sheets 2-5: 4 TSV blocks
+    // Sheets N+: 4 TSV blocks
     const tsvBlocks = [...window.__latestReport.matchAll(/```tsv\s*\n([\s\S]*?)```/g)];
     const NAMES = ['汇总表', '有效进账明细', '已排除明细', '审计轨迹'];
     tsvBlocks.forEach((m, i) => {
@@ -2700,11 +2859,14 @@ async function downloadXlsx() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `audit-report-${Date.now()}.xlsx`;
+    const tplSlug = template === 'purple' ? '' : `-${template}`;
+    a.download = `audit-report${tplSlug}-${Date.now()}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
 
-    const note = matrix ? `已下载 .xlsx (${tsvBlocks.length + 1} 个 sheet)` : `已下载 .xlsx (${tsvBlocks.length} 个 sheet,未识别月度矩阵)`;
+    const totalSheets = (matrix ? 1 : 0) + extraMonthlySheets + tsvBlocks.length;
+    const extraNote = template === 'monthlyTabs' && extraMonthlySheets ? `,含 ${extraMonthlySheets} 张月度详细` : '';
+    const note = matrix ? `已下载 .xlsx (${totalSheets} 个 sheet${extraNote})` : `已下载 .xlsx (${tsvBlocks.length} 个 sheet,未识别月度矩阵)`;
     toast(note, 'ok');
   } catch (err) {
     console.error(err);
