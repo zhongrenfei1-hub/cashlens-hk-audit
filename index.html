@@ -359,6 +359,119 @@ tailwind.config = {
   /* artifact mobile 顶部工具栏(只 mobile 显示) */
   .artifact-mobile-bar { display: none; }
 
+  /* ─── Audit Loading Animation(4 阶段:扫描→分类→连接→勾选) ─── */
+  .audit-loader {
+    position: relative;
+    width: 100%; max-width: 280px;
+    aspect-ratio: 16 / 5;
+    background: linear-gradient(135deg, hsl(222 47% 11%) 0%, hsl(217 33% 14%) 60%, hsl(228 38% 13%) 100%);
+    border-radius: 12px;
+    border: 1px solid hsl(217 91% 60% / 0.15);
+    overflow: hidden;
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.04), 0 4px 24px hsl(222 47% 5% / 0.4);
+  }
+  .audit-loader svg { display: block; width: 100%; height: 100%; }
+  .audit-loader .doc {
+    fill: hsl(0 0% 100% / 0.05);
+    stroke: hsl(213 94% 78% / 0.35);
+    stroke-width: 0.6;
+  }
+  .audit-loader .doc-line {
+    stroke: hsl(213 94% 78% / 0.45);
+    stroke-width: 1; stroke-linecap: round;
+  }
+  .audit-loader .scan-beam {
+    opacity: 0;
+    animation: al-scan 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .audit-loader .link {
+    stroke: hsl(213 94% 78% / 0.55);
+    stroke-width: 0.9;
+    stroke-dasharray: 3 2.5;
+    stroke-dashoffset: 50;
+    opacity: 0;
+    animation: al-link 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .audit-loader .link.l2 { animation-delay: 0.2s; }
+  .audit-loader .dot {
+    fill: hsl(213 94% 75%);
+    opacity: 0;
+    animation: al-dot 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    transform-origin: center;
+    filter: drop-shadow(0 0 3px hsl(213 94% 75%));
+  }
+  .audit-loader .dot.d2 { animation-delay: 0.2s; }
+  .audit-loader .check-circle {
+    fill: hsl(160 84% 50% / 0.12);
+    stroke: hsl(160 84% 60%);
+    stroke-width: 0.8;
+    opacity: 0;
+    animation: al-checkbg 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    transform-origin: 100px 31px;
+  }
+  .audit-loader .check {
+    fill: none;
+    stroke: hsl(160 84% 70%);
+    stroke-width: 1.6;
+    stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 14;
+    stroke-dashoffset: 14;
+    opacity: 0;
+    animation: al-check 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    filter: drop-shadow(0 0 4px hsl(160 84% 60% / 0.6));
+  }
+  /* 浮动粒子背景 */
+  .audit-loader .particle {
+    fill: hsl(213 94% 75% / 0.5);
+    animation: al-particle 6s ease-in-out infinite;
+  }
+  .audit-loader .particle.p2 { animation-delay: 1.2s; }
+  .audit-loader .particle.p3 { animation-delay: 2.8s; }
+  .audit-loader .particle.p4 { animation-delay: 4s; }
+
+  @keyframes al-scan {
+    0%       { opacity: 0; transform: translateY(0); }
+    8%       { opacity: 1; }
+    32%      { opacity: 1; transform: translateY(58px); }
+    36%      { opacity: 0; }
+    100%     { opacity: 0; }
+  }
+  @keyframes al-link {
+    0%, 36%  { stroke-dashoffset: 50; opacity: 0; }
+    50%      { stroke-dashoffset: 0; opacity: 1; }
+    78%      { opacity: 1; }
+    88%      { opacity: 0.4; }
+    100%     { opacity: 0; }
+  }
+  @keyframes al-dot {
+    0%, 50%  { opacity: 0; }
+    60%      { opacity: 1; }
+    78%      { opacity: 0.9; }
+    100%     { opacity: 0; }
+  }
+  @keyframes al-checkbg {
+    0%, 75%  { opacity: 0; transform: scale(0.5); }
+    85%      { opacity: 1; transform: scale(1.1); }
+    92%      { transform: scale(1); }
+    100%     { opacity: 1; transform: scale(1); }
+  }
+  @keyframes al-check {
+    0%, 80%  { stroke-dashoffset: 14; opacity: 0; }
+    92%      { stroke-dashoffset: 0; opacity: 1; }
+    100%     { stroke-dashoffset: 0; opacity: 1; }
+  }
+  @keyframes al-particle {
+    0%       { opacity: 0; transform: translate(0, 0); }
+    20%      { opacity: 0.7; }
+    80%      { opacity: 0.5; }
+    100%     { opacity: 0; transform: translate(8px, -3px); }
+  }
+  /* 紧凑变体:用在 thinkingDots(chat 流) */
+  .audit-loader.audit-loader-sm {
+    max-width: 200px;
+    border-radius: 10px;
+  }
+
   /* ─── Preview Hero card(预览模式顶部指标块,从 ```json 块解析) ─── */
   .preview-hero {
     background: linear-gradient(135deg, hsl(262 60% 16%) 0%, hsl(327 50% 14%) 50%, hsl(21 50% 13%) 100%);
@@ -2176,15 +2289,63 @@ function setExportButtonsDisabled(disabled) {
   });
 }
 
+// 4 阶段 audit 加载动画(扫描→分类→数据点连接→勾选).
+// size='sm' 用在 chat 流的 thinking 状态(紧凑);默认尺寸用在大区域 loading.
+function auditLoadingHTML(size) {
+  const cls = size === 'sm' ? 'audit-loader audit-loader-sm' : 'audit-loader';
+  // 每个实例 ID 加随机后缀,避免同页多实例 SVG defs ID 冲突
+  const gid = 'al-grad-' + Math.random().toString(36).slice(2, 8);
+  return `
+    <div class="${cls}">
+      <svg viewBox="0 0 200 62.5" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="${gid}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="hsl(213, 94%, 78%)" stop-opacity="0"/>
+            <stop offset="50%" stop-color="hsl(213, 94%, 78%)" stop-opacity="0.7"/>
+            <stop offset="100%" stop-color="hsl(213, 94%, 78%)" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <circle class="particle p1" cx="50" cy="10" r="0.7"/>
+        <circle class="particle p2" cx="150" cy="55" r="0.6"/>
+        <circle class="particle p3" cx="100" cy="8" r="0.6"/>
+        <circle class="particle p4" cx="180" cy="30" r="0.7"/>
+        <g>
+          <rect class="doc" x="14" y="12" width="24" height="38" rx="2"/>
+          <line class="doc-line" x1="18" y1="22" x2="32" y2="22"/>
+          <line class="doc-line" x1="18" y1="28" x2="30" y2="28"/>
+          <line class="doc-line" x1="18" y1="34" x2="32" y2="34"/>
+          <line class="doc-line" x1="18" y1="40" x2="28" y2="40"/>
+        </g>
+        <g>
+          <rect class="doc" x="88" y="12" width="24" height="38" rx="2"/>
+          <line class="doc-line" x1="92" y1="22" x2="106" y2="22"/>
+          <line class="doc-line" x1="92" y1="28" x2="104" y2="28"/>
+          <line class="doc-line" x1="92" y1="34" x2="106" y2="34"/>
+          <line class="doc-line" x1="92" y1="40" x2="102" y2="40"/>
+        </g>
+        <g>
+          <rect class="doc" x="162" y="12" width="24" height="38" rx="2"/>
+          <line class="doc-line" x1="166" y1="22" x2="180" y2="22"/>
+          <line class="doc-line" x1="166" y1="28" x2="178" y2="28"/>
+          <line class="doc-line" x1="166" y1="34" x2="180" y2="34"/>
+          <line class="doc-line" x1="166" y1="40" x2="176" y2="40"/>
+        </g>
+        <rect class="scan-beam" x="0" y="-1" width="200" height="2" fill="url(#${gid})"/>
+        <line class="link l1" x1="38" y1="31" x2="88" y2="31"/>
+        <line class="link l2" x1="112" y1="31" x2="162" y2="31"/>
+        <circle class="dot d1" cx="63" cy="31" r="1.6"/>
+        <circle class="dot d2" cx="137" cy="31" r="1.6"/>
+        <circle class="check-circle" cx="100" cy="31" r="9"/>
+        <path class="check" d="M94 31 L98 35 L107 25"/>
+      </svg>
+    </div>`;
+}
+
 function thinkingDots() {
   return appendCard(`
-    <div class="flex gap-3" id="thinkingMsg">
+    <div class="flex gap-3 items-start" id="thinkingMsg">
       <div class="w-7 h-7 rounded-lg accent-bg flex-shrink-0 flex items-center justify-center text-[12px] ai-pulse">🔮</div>
-      <div class="flex items-center gap-1 pt-2">
-        <span class="dot w-1.5 h-1.5 rounded-full bg-fg2 inline-block"></span>
-        <span class="dot w-1.5 h-1.5 rounded-full bg-fg2 inline-block"></span>
-        <span class="dot w-1.5 h-1.5 rounded-full bg-fg2 inline-block"></span>
-      </div>
+      <div class="flex-1 pt-1">${auditLoadingHTML('sm')}</div>
     </div>`);
 }
 
