@@ -544,6 +544,62 @@ tailwind.config = {
     .audit-progress .connector { width: 8px; }
   }
 
+  /* ─── Audit Spinner(单圆 1:1,反向双轨道 + 中心脉冲,最克制的 loading) ─── */
+  .audit-spinner {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: radial-gradient(circle at center, hsl(217 33% 19%) 0%, hsl(222 47% 11%) 100%);
+    border: 1px solid hsl(217 91% 60% / 0.18);
+    position: relative;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .audit-spinner svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .audit-spinner .ring-outer {
+    fill: none;
+    stroke: hsl(213 94% 78%);
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-dasharray: 18 70;
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: as-rotate-cw 2.4s linear infinite;
+    opacity: 0.85;
+    filter: drop-shadow(0 0 2px hsl(213 94% 75% / 0.5));
+  }
+  .audit-spinner .ring-inner {
+    fill: none;
+    stroke: hsl(213 94% 80%);
+    stroke-width: 1;
+    stroke-linecap: round;
+    stroke-dasharray: 6 22;
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: as-rotate-ccw 3.8s linear infinite;
+    opacity: 0.55;
+  }
+  .audit-spinner .core {
+    fill: hsl(213 94% 85%);
+    filter: drop-shadow(0 0 3px hsl(213 94% 60% / 0.8));
+    animation: as-core-pulse 2s ease-in-out infinite;
+  }
+  @keyframes as-rotate-cw  { to { transform: rotate(360deg); } }
+  @keyframes as-rotate-ccw { to { transform: rotate(-360deg); } }
+  @keyframes as-core-pulse {
+    0%, 100% { opacity: 0.55; }
+    50%      { opacity: 1; }
+  }
+  /* 尺寸变体 */
+  .audit-spinner.audit-spinner-xs { width: 18px; height: 18px; }
+  .audit-spinner.audit-spinner-sm { width: 22px; height: 22px; }
+  .audit-spinner.audit-spinner-md { width: 32px; height: 32px; }
+  .audit-spinner.audit-spinner-lg { width: 44px; height: 44px; }
+  /* 用在按钮内时:去掉自带背景,用按钮的色让 spinner 透明融入 */
+  .audit-spinner.audit-spinner-inline {
+    background: transparent; border: none;
+  }
+
   /* ─── Preview Hero card(预览模式顶部指标块,从 ```json 块解析) ─── */
   .preview-hero {
     background: linear-gradient(135deg, hsl(262 60% 16%) 0%, hsl(327 50% 14%) 50%, hsl(21 50% 13%) 100%);
@@ -1861,6 +1917,34 @@ function toast(msg, type = 'info') {
   t.classList.remove('hidden');
   clearTimeout(window.__toastTimer);
   window.__toastTimer = setTimeout(() => t.classList.add('hidden'), 3000);
+}
+
+// 不自动消失的 loading toast,返回 dismiss 函数.场景:Excel 生成 / PDF 解析等
+// 真实进行中的操作,客户需要看到"正在转",而不是 3 秒后消失的提示。
+function toastLoading(msg) {
+  const t = document.getElementById('toast');
+  const body = document.getElementById('toastBody');
+  body.className = 'bg-surface border border-subtle rounded-lg shadow-2xl px-4 py-2.5 text-[13px] flex items-center gap-2.5 text-fg1';
+  body.innerHTML = `${auditSpinnerHTML('xs')}<span>${escapeHtml(msg)}</span>`;
+  t.classList.remove('hidden');
+  clearTimeout(window.__toastTimer);
+  // 返回 dismiss 函数;调用方用 try/finally 确保关闭
+  return () => { t.classList.add('hidden'); };
+}
+
+// 单圆 1:1 的极简 spinner.最克制的 loading 反馈,几乎看不见的智能.
+// size: 'xs' | 'sm' | 'md' | 'lg' | 'inline'(透明背景,跟随父容器色)
+function auditSpinnerHTML(size) {
+  const cls = ['audit-spinner'];
+  if (size && size !== 'md') cls.push('audit-spinner-' + size);
+  return `
+    <span class="${cls.join(' ')}" role="status" aria-label="loading">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle class="ring-outer" cx="12" cy="12" r="9"/>
+        <circle class="ring-inner" cx="12" cy="12" r="5.5"/>
+        <circle class="core" cx="12" cy="12" r="1.2"/>
+      </svg>
+    </span>`;
 }
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -3544,7 +3628,8 @@ async function downloadXlsx(template = 'purple') {
   if (!window.__latestReport) { toast('暂无报告', 'warn'); return; }
   // 关闭可能打开的下拉菜单
   document.getElementById('xlsxMenu')?.classList.add('hidden');
-  toast(`生成 Excel (${(XLSX_THEMES[template] || XLSX_THEMES.purple).label.replace(/^\S+\s/, '')})…`, 'info');
+  // 持久 loading toast(带 spinner),完成或出错时 dismiss
+  const dismissLoading = toastLoading(`生成 Excel (${(XLSX_THEMES[template] || XLSX_THEMES.purple).label.replace(/^\S+\s/, '')})…`);
   try {
     const ExcelJS = await loadExcelJS();
     const wb = new ExcelJS.Workbook();
@@ -3580,6 +3665,7 @@ async function downloadXlsx(template = 'purple') {
     });
 
     if (!matrix && tsvBlocks.length === 0) {
+      dismissLoading();
       toast('报告里既没有月度矩阵也没有 TSV 数据,无法生成 Excel', 'warn');
       return;
     }
@@ -3597,9 +3683,11 @@ async function downloadXlsx(template = 'purple') {
     const totalSheets = (matrix ? 1 : 0) + extraMonthlySheets + tsvBlocks.length;
     const extraNote = template === 'monthlyTabs' && extraMonthlySheets ? `,含 ${extraMonthlySheets} 张月度详细` : '';
     const note = matrix ? `已下载 .xlsx (${totalSheets} 个 sheet${extraNote})` : `已下载 .xlsx (${tsvBlocks.length} 个 sheet,未识别月度矩阵)`;
+    dismissLoading();
     toast(note, 'ok');
   } catch (err) {
     console.error(err);
+    dismissLoading();
     toast('生成失败:' + (err.message || err), 'err');
   }
 }
