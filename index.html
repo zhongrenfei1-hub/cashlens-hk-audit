@@ -211,7 +211,7 @@ tailwind.config = {
   }
   .tour-tip {
     position: absolute;
-    width: 340px;
+    width: min(340px, calc(100vw - 32px));
     background: hsl(276 63% 7%);
     border: 1px solid hsl(270 50% 35% / 0.5);
     border-radius: 14px;
@@ -219,6 +219,11 @@ tailwind.config = {
     box-shadow: 0 16px 48px hsl(0 0% 0% / 0.6);
     color: #fafafa;
     transition: all 280ms cubic-bezier(0.2,0,0,1);
+  }
+  /* Mobile 上 tour 默认居中显示 + 收紧 padding,避免贴边 */
+  @media (max-width: 639px) {
+    .tour-tip { padding: 14px; }
+    .tour-spot { display: none !important; }
   }
   .tour-tip-arrow {
     position: absolute;
@@ -298,6 +303,7 @@ tailwind.config = {
       position: fixed; left: 0; top: 56px; bottom: 0; z-index: 60;
       box-shadow: 4px 0 32px rgba(0,0,0,0.6);
       animation: slideInLeft 250ms ease-out;
+      width: min(280px, 85vw);
     }
   }
   @media (max-width: 1279px) {
@@ -309,6 +315,36 @@ tailwind.config = {
       animation: slideInRight 250ms ease-out;
     }
   }
+  /* ─── Mobile (<sm = 640px): artifact 全屏覆盖,跟 ChatGPT/Claude 移动版一致 ─── */
+  @media (max-width: 639px) {
+    #artifactPanel.show-mobile {
+      width: 100vw !important;
+      box-shadow: none;
+      top: 0 !important;
+      z-index: 70;
+    }
+    /* Mobile artifact 顶部加一行返回工具栏 */
+    #artifactPanel.show-mobile .artifact-mobile-bar {
+      display: flex !important;
+    }
+    /* Settings modal 在 mobile 上变全屏 */
+    #settingsModal > div {
+      width: 100vw !important;
+      height: 100vh !important;
+      max-height: 100vh !important;
+      border-radius: 0 !important;
+      max-width: none !important;
+    }
+  }
+  /* 安全区:iOS notch / Android 底部手势条 */
+  header { padding-top: env(safe-area-inset-top); }
+  body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+  /* 触屏:输入框最小 16px 防 iOS 自动 zoom + 关键按钮 hit area >=44px */
+  @media (max-width: 639px) {
+    input[type="text"], input[type="password"], input[type="date"], input[type="email"],
+    textarea, select { font-size: 16px !important; }
+    .mobile-tap { min-height: 44px; }
+  }
   @keyframes slideInLeft  { from { transform: translateX(-100%); } to { transform: translateX(0); } }
   @keyframes slideInRight { from { transform: translateX(100%);  } to { transform: translateX(0); } }
   .panel-backdrop {
@@ -316,7 +352,12 @@ tailwind.config = {
     z-index: 55; backdrop-filter: blur(2px);
     animation: fadeIn 200ms ease-out;
   }
+  @media (max-width: 639px) {
+    .panel-backdrop { inset: 0 !important; z-index: 65; }
+  }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  /* artifact mobile 顶部工具栏(只 mobile 显示) */
+  .artifact-mobile-bar { display: none; }
 </style>
 </head>
 <body class="bg-base text-fg1 font-sans h-screen overflow-hidden">
@@ -335,15 +376,15 @@ tailwind.config = {
     <div class="text-[11px] text-fg3 font-medium hidden md:block ml-1">现金透镜</div>
   </div>
 
-  <button id="companyBtn" onclick="openCompanyEditor()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-elevated text-sm transition">
+  <button id="companyBtn" onclick="openCompanyEditor()" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-elevated text-sm transition">
     <span class="w-5 h-5 rounded-md bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-[10px] font-bold" id="companyAvatar">M</span>
-    <span class="text-fg1" id="companyLabel">Miheng Trading Limited</span>
-    <svg class="w-3.5 h-3.5 text-fg3" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    <span class="text-fg1 truncate max-w-[180px]" id="companyLabel">Miheng Trading Limited</span>
+    <svg class="w-3.5 h-3.5 text-fg3 flex-shrink-0" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
   </button>
 
   <div class="flex-1"></div>
 
-  <div id="ctxChip" class="chip bg-surface border border-subtle text-fg2" title="当前模型上下文用量">
+  <div id="ctxChip" class="chip bg-surface border border-subtle text-fg2 hidden md:inline-flex" title="当前模型上下文用量">
     <span>📊</span>
     <span class="tabular">0K</span>
     <span class="text-fg3">/</span>
@@ -351,24 +392,24 @@ tailwind.config = {
     <span class="text-fg3 hidden md:inline">已用</span>
     <span class="tabular text-fg3 hidden md:inline">0%</span>
   </div>
-  <div id="costChip" class="chip bg-surface border border-subtle text-fg2">
+  <div id="costChip" class="chip bg-surface border border-subtle text-fg2 hidden md:inline-flex">
     <span class="w-1.5 h-1.5 rounded-full bg-fg3"></span>
     <span class="tabular">$0.00</span>
     <span class="text-fg3">·</span>
     <span>本次会话</span>
   </div>
 
-  <button onclick="toggleArtifactPanel()" class="xl:hidden w-8 h-8 rounded-lg hover:bg-elevated flex items-center justify-center text-fg2 transition" title="侧边面板">
+  <button onclick="toggleArtifactPanel()" class="xl:hidden w-9 h-9 sm:w-8 sm:h-8 rounded-lg hover:bg-elevated flex items-center justify-center text-fg2 transition" title="侧边面板">
     <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.4"/></svg>
   </button>
-  <button onclick="startTour()" class="w-8 h-8 rounded-lg hover:bg-elevated flex items-center justify-center text-fg2 transition" title="功能教学">
+  <button onclick="startTour()" class="hidden sm:flex w-8 h-8 rounded-lg hover:bg-elevated items-center justify-center text-fg2 transition" title="功能教学">
     <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M6 6c0-1.1.9-2 2-2s2 .9 2 2c0 .8-.5 1.4-1.2 1.7-.5.2-.8.6-.8 1.1V9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.5" r="0.5" fill="currentColor"/></svg>
   </button>
-  <button onclick="openSettings()" class="w-8 h-8 rounded-lg hover:bg-elevated flex items-center justify-center text-fg2 transition" title="设置">
+  <button onclick="openSettings()" class="w-9 h-9 sm:w-8 sm:h-8 rounded-lg hover:bg-elevated flex items-center justify-center text-fg2 transition" title="设置">
     <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v2M8 13v2M15 8h-2M3 8H1M12.95 3.05l-1.4 1.4M4.45 11.55l-1.4 1.4M12.95 12.95l-1.4-1.4M4.45 4.45l-1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
   </button>
 
-  <div class="relative">
+  <div class="relative hidden sm:block">
     <button id="exportXlsxBtn" onclick="toggleXlsxMenu(event)" disabled class="px-3 py-1.5 rounded-lg bg-elevated border border-subtle text-fg1 text-sm font-medium hover:bg-base disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1.5" title="导出 Excel · 选模板">
       <span>📊</span>
       Excel
@@ -394,7 +435,7 @@ tailwind.config = {
       </button>
     </div>
   </div>
-  <button id="exportBtn" onclick="exportReport()" disabled class="px-3 py-1.5 rounded-lg accent-bg text-white text-sm font-medium hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1.5">
+  <button id="exportBtn" onclick="exportReport()" disabled class="hidden sm:flex px-3 py-1.5 rounded-lg accent-bg text-white text-sm font-medium hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition items-center gap-1.5">
     <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M3.5 5.5L7 9l3.5-3.5M2 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     导出
   </button>
@@ -453,10 +494,13 @@ tailwind.config = {
               <path d="M12 4v12M7 9l5-5 5 5M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
-          <h2 class="text-xl font-semibold text-fg1 mb-2">把月结单拖到这里</h2>
+          <h2 class="text-xl font-semibold text-fg1 mb-2">
+            <span class="hidden sm:inline">把月结单拖到这里</span>
+            <span class="sm:hidden">点下方按钮上传</span>
+          </h2>
           <p class="text-sm text-fg2 mb-1">客户给您什么都行 — 自动识别并解析</p>
           <p class="text-[12px] text-fg3 mb-2">📄 PDF · 🖼️ JPG/PNG/HEIC · 📊 Excel · 📋 CSV · 📝 Word · 🗂️ ZIP · ✉️ Email · 🗄️ SQLite</p>
-          <p class="text-[11px] text-fg3 mb-6">支持<span class="text-accent2">拖整个文件夹</span> · ZIP 自动展开 · 单文件 ≤ 64 MB · HEIC 自动转 JPEG</p>
+          <p class="text-[11px] text-fg3 mb-6"><span class="hidden sm:inline">支持<span class="text-accent2">拖整个文件夹</span> · </span>ZIP 自动展开 · 单文件 ≤ 64 MB · HEIC 自动转 JPEG</p>
           <div class="flex items-center justify-center gap-2">
             <label for="fileInput" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-elevated border border-subtle hover:border-line text-sm font-medium cursor-pointer transition">
               <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><path d="M11 7H3M11 7l-3-3M11 7l-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-90 7 7)"/></svg>
@@ -570,6 +614,19 @@ tailwind.config = {
   <!-- ─── Right Artifact Panel(像 Claude 的 artifact 一样)─── -->
   <aside id="artifactPanel" class="border-l border-subtle bg-base hidden xl:flex flex-col transition-all duration-300"
          style="width: 320px;">
+    <!-- Mobile-only top bar (返回 + 主要操作),仅在 mobile 全屏 modal 模式下显示 -->
+    <div class="artifact-mobile-bar items-center px-2 py-1.5 border-b border-subtle bg-surface gap-1">
+      <button onclick="toggleArtifactPanel()" class="w-10 h-10 rounded-lg hover:bg-elevated flex items-center justify-center text-fg1" title="返回">
+        <svg class="w-5 h-5" viewBox="0 0 16 16" fill="none"><path d="M10 3l-5 5 5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="text-[13px] font-medium text-fg1 flex-1 truncate" id="artifactMobileTitle">分析报告</div>
+      <button id="exportXlsxBtnMobile" onclick="downloadXlsx('purple')" disabled class="px-3 h-10 rounded-lg bg-elevated border border-subtle text-fg1 text-[12.5px] disabled:opacity-30 flex items-center gap-1" title="导出 Excel">
+        <span>📊</span><span>Excel</span>
+      </button>
+      <button id="exportBtnMobile" onclick="exportReport()" disabled class="px-3 h-10 rounded-lg accent-bg text-white text-[12.5px] disabled:opacity-30 flex items-center gap-1" title="导出 .md">
+        <span>📥</span>
+      </button>
+    </div>
     <!-- Header bar -->
     <div class="px-4 py-3 border-b border-subtle flex items-center justify-between gap-2">
       <div class="flex items-center gap-2 min-w-0 flex-1">
@@ -1886,8 +1943,15 @@ function finalizeAssistant(id, fullText) {
 
   // Stash latest text for export
   window.__latestReport = fullText;
-  document.getElementById('exportBtn').disabled = false;
-  document.getElementById('exportXlsxBtn').disabled = false;
+  setExportButtonsDisabled(false);
+}
+
+// 4 个导出按钮(顶部 2 个 + artifact mobile bar 2 个)的 disable 状态同步开关。
+function setExportButtonsDisabled(disabled) {
+  ['exportBtn', 'exportXlsxBtn', 'exportBtnMobile', 'exportXlsxBtnMobile'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = disabled;
+  });
 }
 
 function thinkingDots() {
@@ -3461,8 +3525,7 @@ ${fileList}`;
       }
       updateCostChip(usage);
       window.__latestReport = fullText;
-      document.getElementById('exportBtn').disabled = false;
-      document.getElementById('exportXlsxBtn').disabled = false;
+      setExportButtonsDisabled(false);
       saveProject({ company, periodStart, periodEnd, fullText, usage, files: stagedFiles.map(f => f.file.name) });
       // Save messages for follow-ups (provider-aware shape)
       const provider2 = getProviderConfig();
@@ -3709,8 +3772,7 @@ function loadProject(id) {
   document.getElementById('periodEnd').value = p.periodEnd;
   applyEntityCachePrefill(p.company);
   window.__latestReport = p.fullText;
-  document.getElementById('exportBtn').disabled = false;
-  document.getElementById('exportXlsxBtn').disabled = false;
+  setExportButtonsDisabled(false);
   toast('已加载历史项目', 'ok');
 }
 
@@ -3719,8 +3781,7 @@ function newSession() {
   document.getElementById('chatStream').innerHTML = '';
   document.getElementById('emptyState').classList.remove('hidden');
   document.getElementById('composer').classList.add('hidden');
-  document.getElementById('exportBtn').disabled = true;
-  document.getElementById('exportXlsxBtn').disabled = true;
+  setExportButtonsDisabled(true);
   window.__latestReport = '';
   ['artifactReportTab','artifactChartsTab','artifactTablesTab','artifactCitationsTab'].forEach(id => {
     const el = document.getElementById(id);
@@ -3935,7 +3996,10 @@ function showTourStep() {
   nextBtn.textContent = (__tourIdx === TOUR_STEPS.length - 1) ? '完成 ✓' : '下一步 →';
 
   // Position spotlight + tooltip
-  if (!step.sel || step.pos === 'center') {
+  // Mobile (<640px):因为很多被 spot 高亮的桌面控件已经被 hidden 了,
+  // 直接居中显示 tour-tip,避免定位到不存在的元素失败 / 弹到屏幕外。
+  const isMobileTour = window.innerWidth < 640;
+  if (isMobileTour || !step.sel || step.pos === 'center') {
     spot.style.display = 'none';
     arrow.style.display = 'none';
     tip.style.left = '50%';
