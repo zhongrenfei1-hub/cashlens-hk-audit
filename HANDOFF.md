@@ -1,13 +1,17 @@
 # Cashlens 交接文档
 
-> 给下一个 AI / Claude / Codex 看。新会话开始时，把这份文档贴进去，然后说：
-> “接着这份 HANDOFF.md 继续帮我做 Cashlens，我现在要：[新需求]”。
+> 给下一个 AI / Claude / Codex 看。新会话开始时把这份贴进去,然后说:
+> "接着这份 HANDOFF.md 继续帮我做 Cashlens,我现在要:[新需求]"。
 
-最后更新：2026-05-08 15:30 CST
-当前线上确认版本：`e9b3f98` (`feat(worker): Cloudflare Worker 反代框架`)
-本地待推送：
-- 切到 B 方案：移除内置 API Key，客户必须自己在设置面板填自己的 DeepSeek key
-- 教程文案 + 首页空状态横幅同步更新
+**最后更新:** 2026-05-09 (接近上下文上限切换会话前的快照)
+**最新已推送:** `f98254a chore: prompt 加「输出顺序与长度策略」段(防 max_tokens 截断)`
+
+⚠️ **接手第一件事:** 浏览器打开 https://zhongrenfei1-hub.github.io/cashlens-hk-audit/ 验证能否打开。
+本会话末用户报告"无法访问此网站",我已用 `node new Function()` 验证 3 个 inline script syntax 全 OK,
+所以**最大概率是 GitHub Pages 部署延迟**(推 commit 后 1-10 分钟才生效)。
+若打开仍 404 / 白屏:
+1. 看 https://github.com/zhongrenfei1-hub/cashlens-hk-audit/actions Pages 部署日志
+2. 极少数情况是 prompt 字符串里反引号 `\`` 转义出 bug — 我 grep 过 line 1376-1382 的反引号都正确转义了 `\\\`\\\`\\\``,但若新 AI 怀疑可临时回滚 `git revert f98254a` 再 push
 
 ---
 
@@ -15,372 +19,371 @@
 
 | 项 | 值 |
 |---|---|
-| 项目名 | Cashlens（现金透镜）— 香港 SME 银行流水审计分析工具 |
+| 项目名 | Cashlens(现金透镜)— 香港 SME 银行流水审计分析工具 |
 | 线上地址 | https://zhongrenfei1-hub.github.io/cashlens-hk-audit/ |
 | GitHub 仓库 | https://github.com/zhongrenfei1-hub/cashlens-hk-audit |
-| 部署方式 | GitHub Pages，推送 `main` 后自动部署 |
-| 当前主文件 | `index.html`（单文件前端应用） |
-| 当前本地工作目录 | `/Users/qiu/海荣香港/99_部署版` |
+| 部署方式 | GitHub Pages,推送 `main` 后自动部署(1-10 分钟) |
+| 当前主文件 | `index.html`(单文件前端应用,~4500 行) |
+| 本地工作目录 | `/Users/qiu/海荣香港/99_部署版` |
+| Preview server | 名为 "Cashlens · 部署版" 的 launch 配置,port 8101 |
 | 当前分支 | `main` |
-| 最新已推送提交 | `80e1762 docs: update handoff after bug fixes` |
+| 最新已推送 | `f98254a` |
 
-注意：上一份 HANDOFF 里的 `/tmp/cashlens-hk-audit-review` 是临时检查目录，已重新切回 `/Users/qiu/海荣香港/99_部署版` 作为正式工作目录（preview server `Cashlens · 部署版` 默认指这里）。
+辅助仓库:
+- `cloudflare-worker/` 子目录:Cloudflare Worker 反代代码骨架(C 方案,**未启用**,留作后续可选)
+- 还有一个**独立工具** `/Users/qiu/excel-balance-template/`(Python + openpyxl)— 跟当前 web 版无关,
+  是给客户单独离线生成「统计流水模版.xlsx」的脚本
 
 ---
 
 ## 2. 用户偏好 / 工作方式
 
-- 用户中文沟通，能接受中英混合。
-- 用户偏好“直接改、直接验证、直接推”，不要只讲方案。
-- 用户明确说过 API key 风险“key 不用管 / 风险不用管”，所以后续不要反复把 key 暴露当主任务。
-- 但写文档、日志、聊天时不要输出任何完整 key / token / 密码；如必须提到，用 `[REDACTED]`。
-- 用户关心线上网站是否真的能打开、客户能不能直接用、有没有实际 bug。
-- 修复后要用浏览器打开线上站验证，而不是只看代码。
+- **中文沟通**(中英混合 OK)
+- **直接改、直接验证、直接推**,不要只讲方案
+- 不在乎 API key 的"理论暴露"风险("key 不用管 / 风险不用管")。但**最近改成 B 方案**:
+  完全移除内置 key,客户自带 key,所以这个风险话题已自然解决
+- 文档/日志/聊天里不要展开任何完整 key,如必须用 `[REDACTED]`
+- 关心**线上能不能打开、客户能不能直接用、是否真的有 bug**;修复后要用浏览器开线上验证
+- 偏好"专业 SaaS"美学(Linear/Vercel),不要卡通风、emoji 不要泛滥
+- mobile / desktop / 国内访问都要正常
 
 ---
 
 ## 3. 技术架构现状
 
-- 形式：纯前端单文件 HTML 应用。
-- 后端：无。
-- 部署：GitHub Pages。
-- 主要 CDN / 浏览器端库：
-  - Tailwind
-  - PDF.js
-  - ECharts
-  - SheetJS
-  - mammoth.js
-  - heic2any
-  - JSZip
-  - sql.js（懒加载）
-  - Tesseract.js（懒加载）
-  - Google Fonts / Inter / Instrument Serif / IBM Plex Mono
-- AI Provider：支持 aipaibox、DeepSeek、通义千问、豆包、Kimi、智谱、OpenRouter、OpenAI、Anthropic、自定义 OpenAI-compatible。
-- 当前默认 provider/model：`deepseek` / `deepseek-chat`（V3，¥0.27/M 输入 · ¥1.1/M 输出）。
-- 当前内置 API Key：**无**（B 方案）。
-  - 历史上 aipaibox 和 DeepSeek 的 key 都曾内置在前端代码里，导致 GitHub 公开仓库 + 客户右键即可看到，存在被刷风险。
-  - 自本次起 `DEFAULTS.apiKey = ''`，新用户首次访问需要自己去 https://platform.deepseek.com/api_keys 申请 key 并粘到设置面板里。
-  - 首页空状态加了一条黄色 ⚠️ 横幅，未填 key 时显示"用前要先填 API Key"+ DeepSeek 官网链接 +「去设置」按钮，由 `updateApiKeyDot()` 同步控制 hide/show。
-  - 点开始分析时若 key 为空，原有 fallback (`streamAI` 入口 line ~3119) 会 toast + 自动 openSettings，无需新增。
-  - ⚠️ DeepSeek 不支持图片 / PDF 原生输入（`pdfMode: 'text'`），PDF 会被 PDF.js 先 extract 成纯文本再喂给模型 — 表格密集 / 扫描件型流水识别精度会受影响，必要时让客户切到 aipaibox / 通义 / 豆包系。
-  - 老用户 localStorage 里已存的旧 provider/model/key 不变，他们继续用旧设置直到自己改。
-- Cloudflare Worker 反代（C 方案）的代码骨架在 `cloudflare-worker/` 目录里保留，**目前未启用**——前端不指向它。如以后用户改主意想用代理隐藏 key，按 `cloudflare-worker/README.md` 部署一遍 + 把前端 `PROVIDERS.deepseek.baseUrl` 改成 Worker URL 即可。
-- 默认 API key 存在于前端源码中，文档里不要展开写，统一视为 `[REDACTED]`。
+### 形式
+纯前端单文件 HTML 应用(`index.html`),没有后端。
+
+### CDN / 浏览器端库
+- Tailwind CSS(浏览器版,生产警告可忽略)
+- PDF.js(PDF 文本提取)
+- ECharts 5.5.1(图表)
+- ExcelJS 4.4.0(按需懒加载,Excel 导出)
+- SheetJS(Excel/CSV 解析输入)
+- mammoth.js(Word docx)
+- heic2any(iOS 图片转 JPEG)
+- JSZip(ZIP 解压)
+- sql.js(懒加载,SQLite)
+- Tesseract.js(懒加载,OCR)
+- Google Fonts:Inter / Instrument Serif / IBM Plex Mono
+
+### AI Provider
+支持 9 家:DeepSeek / 通义千问 / 豆包 / Kimi / 智谱 / aipaibox 中转 / OpenRouter / OpenAI / Anthropic / Custom OpenAI-compatible。
+
+### 当前默认 provider/model
+`deepseek` / `deepseek-chat`(V3,¥0.27/M 输入 · ¥1.1/M 输出)。
+
+### 当前内置 API Key
+**无**(B 方案,自 commit `4e3548a` 起)。
+- `DEFAULTS.apiKey = ''`
+- 客户必须自己去 https://platform.deepseek.com/api_keys 申请并填到设置面板
+- 首页空状态有 ⚠️ 黄色横幅引导,文案已精简到 1 行
+- ⚠️ DeepSeek **不支持图片/PDF 原生输入**(`pdfMode: 'text'`),PDF 由 PDF.js 先 extract 成纯文本再喂模型 — 表格密集 / 扫描件 PDF 识别精度会受影响,客户实测如效果差,让他切到 aipaibox/通义/豆包系
+- 老用户 localStorage 里旧 provider/model/key 不变(向后兼容)
+
+### Cloudflare Worker 反代(C 方案 · 未启用)
+`cloudflare-worker/` 目录里有完整骨架:
+- `worker.js` - 反代代码,Origin 白名单 + SSE 流透传 + 健康检查 `/`
+- `README.md` - 一步步部署文档(给零 Cloudflare 经验的人)
+- `wrangler.toml` - 给会用 CLI 的人
+
+如果以后用户想"内置 key + 隐藏 key + 防客户偷",按 README 部署 Worker + 把 PROVIDERS.deepseek.baseUrl 改 Worker URL 即可。
 
 ---
 
-## 4. 主要功能
+## 4. 主要功能(到 `f98254a` 为止)
 
-1. 多格式上传 / 解析
-   - PDF
-   - 图片 JPG / PNG / WebP
-   - HEIC / HEIF 自动转 JPEG
-   - Excel
-   - CSV / TSV
-   - Word docx
-   - ZIP 递归展开
-   - EML / MSG
-   - SQLite
-   - TXT / MD / JSON / LOG
+### 4.1 多格式上传 / 解析
+PDF / 图片(JPG/PNG/WebP/HEIC) / Excel / CSV / Word / ZIP / EML / SQLite / TXT。
+- 单文件 ≤ 64 MB
+- 自动跳过 `.DS_Store` / `Thumbs.db` / `__MACOSX/`
+- 支持文件夹拖拽(webkitGetAsEntry 递归)
+- mobile 上无拖功能,只能点按钮选 — 文案已响应式适配
 
-2. 浏览器内文件处理
-   - 单文件上限 64 MB。
-   - 自动跳过 `.DS_Store` / `Thumbs.db` / `__MACOSX/`。
-   - 支持文件夹拖拽（webkitGetAsEntry 递归）。
+### 4.2 审计分析输出 · v7.1 工作流(预览 → 确认 → 生成)
 
-3. 审计分析输出
-   - 极简结论
-   - 可视化图表
-   - TSV 数据表
-   - 详细说明
-   - 自动识别 IRO / DIPN / SME-FRS / HKSA 引用
+**第一步:预览模式**(AI 默认输出)
+1. 极简核心结论(给老板看的大白话,80-120 字)
+2. 关键指标 Markdown 表格
+3. 可选 ` ```chart ` JSON 块(若不出,前端自动从 TSV 兜底生成图)
+4. **完整 4 张 ```tsv 块**(关键 — 前端图表/Excel/数据表 tab 全部依赖这 4 张)
+5. **结构化 ` ```json ` 概要块**:`preview_status: "preview"` + `metrics`(给 Hero 卡片渲染)
+6. 月度 × 币种矩阵 Markdown 表(给紫色 banner Excel 模板 parse)
+7. 审计结论与关键观察 bullet
+8. 末尾询问"以上预览是否正确?确认无误请回复『确认生成Excel』"
 
-4. Artifact 面板
-   - 报告 tab
-   - 图表 tab
-   - 数据表 tab
-   - 引用 tab
+**第二步:生成模式**(用户回"确认生成Excel"后)
+1. 一行 ✅ 已生成 + 文件名建议(如 `威利星玩具_银行流水分析_2025.04-2026.03.xlsx`)
+2. 最终版 4 张 TSV(基于预览的修正、加总自验、引用条款更精准)
+3. ` ```json {"preview_status":"confirmed"} `(前端把 Hero 的"确认按钮"置灰)
+4. **不重复**总结 / 指标卡片 / 详细说明(预览阶段已给过)
 
-5. 交互
-   - 设置面板
-   - 新手教程
-   - 追问输入框
-   - 项目历史 localStorage
-   - 导出：Markdown / TSV / **Excel（.xlsx 多 sheet，含模板月度矩阵）**
+### 4.3 4 张专业 TSV Sheet(HKSA 230 工作底稿,字段全英文 \\t 分隔)
 
-6. 一键导出 Excel（新）
-   - 顶部 `📊 Excel` 按钮 + artifact 底部 `📊 下载 .xlsx` 按钮。
-   - 用 ExcelJS 4.4.0 CDN 按需懒加载（首次点击约 1s 等待）。
-   - 输出 5 个 sheet：
-     - Sheet 1 `月度矩阵`：紫色 banner / 灰色表头 / 斜体月度数据 / 浅绿 MOVEMENT / 黄色 exchange & SGD 汇率 / 白色 HKD 等值合计 / 红色 BAL 底栏。完整复刻「统计流水模版.xlsx」格式。
-     - Sheet 2-5：从 ```tsv 块还原的 `汇总表` / `有效进账明细` / `已排除明细` / `审计轨迹`，金额列自动数字化 + `#,##0.00` 格式 + 首行冻结。
-   - 月度矩阵优先解析报告里的 Markdown 月度矩阵表（识别 MOVEMENT / exchange / SGD : / HKD : / BAL 各特殊行），缺哪行就自动从其他行算回。HKD 列汇率默认 1。
-   - 公司名取 `companyInput` 输入框，审计期间取 `periodStart / periodEnd`。
-
----
-
-## 5. 这次已经修复的 bug（提交 f323390）
-
-### 5.1 XSS：AI 报告 Markdown 渲染会执行 HTML
-
-原问题：
-- `renderArtifactReport()` 里把 `renderMarkdown(text)` 直接塞进 `innerHTML`。
-- `renderMarkdown()` 对 heading / table / list / blockquote 等内容没有先 escape。
-- 测试 payload：
-  - `renderArtifactReport('### <img src=x onerror="document.body.dataset.xss=1">')`
-- 修复前线上会触发 `document.body.dataset.xss = "1"`。
-
-修复：
-- `renderMarkdown()` 在保护 code block / inline code 后，对普通 Markdown 文本统一 `escapeHtml(md)`。
-- 再做 heading / table / list / blockquote 转换。
-- code block / chart / tsv 恢复时继续 escape 动态文本。
-
-验证：
-- 线上执行 payload 后等待 800ms，`document.body.dataset.xss` 为空。
-- HTML 标签会作为文本显示，不会执行。
-
-### 5.2 设置面板默认 provider 显示错误
-
-原问题：
-- 实际 `getProvider()` 默认是 `aipaibox`。
-- 但 `openSettings()` fallback 写死为 `'deepseek'`。
-- 首次打开设置会显示 DeepSeek / deepseek-chat，和实际运行状态不一致。
-
-修复：
-- `openSettings()` 改为 `const provider = s.provider || DEFAULTS.provider;`
-- 模型选择默认也补上 `DEFAULTS.model`。
-
-验证：
-- 线上打开设置后：
-  - provider = `aipaibox`
-  - model = `gpt-5.4`
-
-### 5.3 日期为空仍能开始分析
-
-原问题：
-- 清空审计期间开始或结束日期后仍会调用分析。
-- prompt 里出现空日期。
-
-修复：
-- `startAnalysis()` 增加必填校验。
-- 空日期时 toast：`请先填写完整审计期间`，并 return。
-
-验证：
-- stub `streamAI` 后，空日期情况下调用次数为 0。
-
-### 5.4 开始日期晚于结束日期仍能分析
-
-原问题：
-- 可提交 `2026-12-31 至 2025-01-01` 这种反向期间。
-
-修复：
-- `startAnalysis()` 增加顺序校验。
-- `periodStart > periodEnd` 时 toast：`审计期间开始日期不能晚于结束日期`，并 return。
-
-验证：
-- stub `streamAI` 后，反向日期情况下调用次数为 0。
-
-### 5.5 CSV / TXT 单独上传时 prompt 误写 PDF 交叉验证
-
-原问题：
-- 原逻辑用 `hasNonPdf` 判断。
-- 只上传 CSV/TXT 也会出现“PDF 月结单 + 其他辅助资料”的交叉验证提示。
-
-修复：
-- 改成：
-  - `hasPdf = stagedFiles.some(f => f.category === 'pdf' || f.subcat === 'pdf')`
-  - `hasAux = stagedFiles.some(f => !(f.category === 'pdf' || f.subcat === 'pdf'))`
-  - 只有 `hasPdf && hasAux` 时才加入交叉验证提示。
-
-验证：
-- 仅上传 CSV 时，prompt 不再包含 `PDF 月结单` / `其他辅助资料` / `外部资料交叉验证`。
-
-### 5.6 custom / oneapi Base URL 为空时误请求相对路径
-
-原问题：
-- provider = custom，Base URL 为空时，会请求当前静态站的 `/chat/completions`。
-- 线上表现为 `HTTP 405`，用户看不懂。
-
-修复：
-- `getProviderConfig()` 对 custom / oneapi 保留空 baseUrl。
-- `streamAI()` 开始请求前检查 `provider?.baseUrl`。
-- 为空则 `onError('请先在设置中填写 Base URL(例如 https://your-endpoint/v1)')`，不发 fetch。
-
-验证：
-- 线上测试 fetch 调用次数 = 0。
-- 错误信息为：`请先在设置中填写 Base URL(例如 https://your-endpoint/v1)`。
-
-### 5.7 “新分析”后旧报告状态残留
-
-原问题：
-- 点击“新分析”后，UI 清空了部分状态，但 `window.__latestReport` 仍保留旧报告。
-- 导出/复制等可能拿到旧内容。
-
-修复：
-- `newSession()` 中加入：
-  - `window.__latestReport = ''`
-  - 清空 `artifactReportTab` / `artifactChartsTab` / `artifactTablesTab` / `artifactCitationsTab`
-  - `artifactStatus` 重置为 `等待分析`
-  - 移除 `.chart-count`
-
-验证：
-- 设置 `window.__latestReport = 'old'` 后调用 `newSession()`，结果为空字符串。
-
-### 5.8 文案不准确
-
-修复：
-- “API Key 加密存于浏览器 localStorage”改为“API Key 仅保存在本机浏览器 localStorage(无后端中转)”。
-- “PDF 仅在你浏览器内 base64,直接通过 HTTPS 发往 api.anthropic.com”改为“上传文件仅在浏览器内读取,直接通过 HTTPS 发往你选择的模型服务商”。
-- 分析气泡中“份月结单”改成“份文件”。
-
----
-
-## 6. 已验证结果
-
-本地验证：
-- 本地静态服务打开成功。
-- 页面标题正确。
-- XSS payload 不执行。
-- 设置默认显示 aipaibox / gpt-5.4。
-- 空日期不调用分析。
-- 日期反向不调用分析。
-- CSV-only prompt 不再出现 PDF 交叉验证。
-- custom Base URL 空不会 fetch。
-- 新分析会清空 latestReport。
-
-线上验证：
-- 打开：`https://zhongrenfei1-hub.github.io/cashlens-hk-audit/?verify=f323390`
-- 页面标题：`Cashlens · 现金透镜 · 香港审计流水分析`
-- 检查补丁文本存在。
-- XSS payload 不执行。
-- 设置默认：aipaibox / gpt-5.4。
-- custom Base URL 空：fetch 调用 0 次，友好报错。
-
----
-
-## 7. 当前已知未修 / 可后续优化
-
-1. API key 暴露
-   - 用户已明确说不用管。
-   - 后续如果要商业化，建议改成 Cloudflare Worker / Edge Function 代理 + 限额 + 域名白名单。
-   - 交接/聊天中不要输出完整 key。
-
-2. 首屏教程遮罩体验
-   - 有时视觉检查会看到新手教程 overlay / 遮罩较重。
-   - console 对 modal 状态和视觉截图曾有差异，可能是 tour overlay 不在 `.modal-backdrop` 查询里。
-   - 可后续检查 `cashlens_tour_seen_v1`、tour DOM、首次访问逻辑。
-
-3. 首屏上传图标偏大 / 布局视觉比例
-   - 网站能打开，但首屏上传图标和布局可以更精致。
-   - 这次没有做视觉重构。
-
-4. 关于弹窗底部略贴边 / 内容滚动提示不明显
-   - 之前 DOM 测过：`clientHeight 504`、`scrollHeight 531`。
-   - 可加底部 padding 或更明显滚动阴影。
-
-5. prompt 版本命名混乱
-   - 代码变量仍叫 `SYSTEM_PROMPT_V4`，UI 有 v4.2，旧 HANDOFF 曾写 v5.0。
-   - 当前未统一版本体系。
-   - 后续建议加一个 `APP_VERSION` / `PROMPT_VERSION` 常量，UI、关于、HANDOFF 都引用。
-
-6. Markdown 渲染器仍是轻量自研
-   - 已修 XSS 主风险。
-   - 但复杂 Markdown 支持有限。
-   - 后续如要更稳，可以引入成熟 Markdown parser + DOMPurify。
-
-7. 没有自动化测试套件
-   - 当前主要靠 browser console 手工测试。
-   - 后续可加 Playwright 测试：XSS、设置默认、日期校验、custom Base URL、newSession。
-
----
-
-## 8. 关键代码位置（当前大致行号）
-
-行号会随修改变化，以搜索函数名为准。
-
-- `DEFAULTS`：约 1138 行
-- `getProvider()` / `getProviderConfig()` / `getModel()`：约 1144 行
-- `openSettings()`：约 1236 行
-- `normalizeBaseUrl()` / `saveSettings()` / `testApiKey()`：约 1285 行
-- `escapeHtml`：约 1402 行
-- `handleFiles()`：约 1615 行
-- `renderStagedFiles()`：约 1695 行
-- `renderArtifactReport()`：约 2240 行
-- `renderMarkdown()`：约 2379 行
-- `streamAI()`：约 2464 行
-- `buildUserContent()`：约 2600 行附近
-- `startAnalysis()`：约 2742 行
-- `loadProject()` / `newSession()`：约 3120 行附近
-
----
-
-## 9. 常用维护命令
-
-```bash
-# 当前这次工作的本地目录
-cd /tmp/cashlens-hk-audit-review
-
-# 更新 main
-git checkout main
-git pull --ff-only origin main
-
-# 看状态
-git status --short
-git log --oneline -5
-
-# 本地预览
-python3 -m http.server 8765
-# 浏览器打开 http://127.0.0.1:8765/index.html
-
-# 提交并推送
-git add index.html HANDOFF.md
-git commit -m "fix: describe change"
-git push origin main
-
-# 线上验证
-# 打开 https://zhongrenfei1-hub.github.io/cashlens-hk-audit/?verify=<commit>
+**Sheet 1 · Transaction_Detail**(主表 · 全部交易明细 · 20 列,**严格此顺序**):
+```
+source_file bank_name statement_period transaction_date description counterparty
+reference original_currency original_amount exchange_rate hkd_equivalent rmb_equivalent
+classification is_valid_inbound exclusion_reason business_nature related_party
+director_related audit_note original_row
 ```
 
-注意：之前有一条命令被环境阻止过，不要重试同类组合：
-- `node --check /tmp/cashlens-script-9.js; ...`
-- 后续语法检查优先用浏览器实际打开 + console，或简单 git diff / grep / Python 文本检查。
+**Sheet 2 · Monthly_Summary**(年-月 + 银行 + 币种聚合):
+```
+year_month bank_name currency valid_inbound_original valid_inbound_hkd
+exchange_rate_used notes
+```
+(末尾追加 TOTAL 合计行)
+
+**Sheet 3 · Exclusion_Summary**(排除项目类别汇总 + 审计轨迹):
+```
+exclusion_category count total_original_currency total_hkd
+representative_audit_note citation
+```
+
+**Sheet 4 · Related_Party_Transactions**(关联方+董事专项,BIR51/管理层声明书用):
+```
+transaction_date bank_name counterparty relation_type original_currency original_amount
+hkd_equivalent business_nature has_supporting_contract disclosure_note citation
+```
+
+### 4.4 输出长度防截断策略(prompt 已写硬约束)
+1. Sheet 1 必须 100% 完整(所有 20 列、所有行、不可 "..." 省略)
+2. 4 张表之间用 `═══` 横线 + 大字标题分隔
+3. 极端长度(笔数 > 200 或预估 > 12k tokens)允许从 ```tsv 降级到 ```json Lines
+   — **前端目前只解析 TSV**,JSON Lines 路径未实现 `parseJsonLines()`,等真实场景出现再加
+4. 字段名/顺序/审计要求即使切 JSON Lines 也不变
+
+### 4.5 Excel 导出 · 4 套模板下拉
+顶部 `📊 Excel ▾` 按钮点开 4 选项:
+- 🟣 紫色 banner(默认)— 原版「统计流水模版.xlsx」风格
+- ⬜ 极简黑白 — 适合打印 / 扫描归档
+- 🔵 专业蓝白 — 深蓝企业风,适合上市公司 / 大客户
+- 📅 月度分 sheet 详细 — 紫色总览 + 每月一张明细 sheet
+
+技术:
+- 主题驱动 `XLSX_THEMES` 配置,buildMatrixSheet 接受 themeKey 参数
+- 月度详细从 Sheet 1 (Transaction_Detail) 按 transaction_date 拆 sheet
+- artifact 底部 📊 下载 .xlsx 按钮单击=默认紫色
+
+### 4.6 同名互转 / 董事往来 识别字段
+公司名输入框下「▸ 高级:同名互转 / 董事往来 识别(可选)」折叠区:
+- 公司在月结单上的别名(多行)
+- 董事姓名(多行)
+- localStorage 按公司名缓存 `cashlens_entity_cache_v1`,同公司下次自动 prefill,折叠区自动展开
+- 填了就插到 prompt 里给 AI 严格匹配
+- loadProject 加载历史项目时也触发 prefill
+
+### 4.7 4 种风格化结论(预览阶段)
+报告最开头自动并列输出 4 种风格,客户挑一种作为对外送出版本:
+- 🎓 审计师视角(80-150 字 + IRO/DIPN 条款)
+- 👔 老板视角(40-80 字 + 3 个数 + 适合邮件)
+- 💼 业务视角(80-150 字 + 业务建议)
+- 📊 财务总监视角(80-150 字 + 风险信号)
+
+### 4.8 顶部 Hero 指标卡片(从 ```json 块解析渲染)
+紫粉色徽章 `📋 预览模式` / `✅ 已确认` + HKD 大数字渐变文字 + 三联指标(总笔数/有效/已剔除) +
+币种 pill + Top 5 客户列表 + 「📥 确认生成 Excel」CTA 按钮(点了自动 sendFollowup `确认生成Excel`)。
+
+JSON schema(```json 块字段约束):
+- `valid_inbound_hkd / total_count / valid_count / excluded_count`:**number** 类型(纯数字,不带引号/千分位)
+- `currency_breakdown`:按 share_pct 降序;share_pct 是 0-100 数字(不带 %)
+- `top_customers`:按 hkd 降序,**最多 5 条**
+- `period`:严格 `"YYYY.MM - YYYY.MM"` 格式(点号 + 空格短横空格)
+- 不许加 `//` 注释(必须合法 JSON)
+- 同一报告不混合 TSV + JSON
+
+### 4.9 3 种 loading 形态(按场景)
+| 形态 | 比例 | 用途 | 已集成位置 | API |
+|---|---|---|---|---|
+| **audit-loader** | 16:5 | 大区域,4 阶段循环动画 | (备用,无固定位置) | `auditLoadingHTML(size?)` |
+| **audit-progress** | 横向 | 4 阶段顺次激活进度条,看见 AI 进度 | `thinkingDots()` | `auditProgressHTML()` + `startAuditProgress(rootEl, opts)` |
+| **audit-spinner** | 1:1 单圆 | 小空间 / 按钮 / toast | `toastLoading()` + downloadXlsx | `auditSpinnerHTML(size?)` (xs/sm/md/lg/inline) |
+
+`startAuditProgress` 默认 1.5s/阶段时间驱动,opts 可传 `{stageDuration, loopDelay}`;
+未来若想绑真实 stream 进度(按 onText token 数推进),改一行就行。
+
+### 4.10 4 个 chat tab + artifact panel
+报告 tab / 图表 tab / 数据表 tab / 引用 tab。
+- ⚠️ 之前修过一个 ECharts 在 hidden 容器里 init 成 0×0 的 bug(commit `45693c0`):
+  - `switchArtifactTab('charts')` 时阶梯式 resize(同步 + RAF + 50ms + 200ms)
+  - `renderChartCard` 给每个 chart 容器挂 ResizeObserver
+  - `__chartInstances.push` 提到 try 外
+  这套 fix 比单次 resize 鲁棒得多,headless 浏览器也能正确渲染。
+
+### 4.11 mobile 端全套优化(对标 ChatGPT/Claude/Gemini · commit `bbc97c1`)
+- 顶部 nav mobile 隐藏:companyBtn / ctxChip / costChip / 顶部 Excel / 导出按钮
+- artifact panel mobile 下变全屏 modal(`#artifactPanel.show-mobile` + `width: 100vw`)
+- artifact mobile-bar(顶部小工具栏)只 mobile 显示,含返回按钮 + Excel + 导出
+- Settings modal mobile 全屏化
+- 安全区:`env(safe-area-inset-*)` 适配 iOS notch / Android 底部
+- 触屏 hit area:按钮 ≥44px,`input/textarea` 强制 ≥16px 防 iOS auto zoom
+- 教程 tour mobile 强制居中显示(很多 tour target 在 mobile 隐藏,靠 `isMobileTour` 切到中央)
+- dropzone 文案响应式:desktop 显示"把月结单拖到这里",mobile 显示"点下方按钮上传"
+
+### 4.12 5 种导出
+1. 顶部 📊 Excel ▾(4 模板下拉)
+2. 顶部 📥 导出(下载 .md)
+3. artifact 底部 📋 复制 / 📥 下载 .md / 📊 复制 TSV / 📊 下载 .xlsx
+4. artifact mobile-bar:📊 Excel + 📥 .md
+5. 数据表 tab 每张 sheet 旁:📋 复制 TSV / 📥 下载 .tsv
+
+`setExportButtonsDisabled(disabled)` helper 同步控制 4 个 export 按钮的 disabled 状态(顶部 2 + mobile-bar 2)。
 
 ---
 
-## 10. 给下一个 AI 的建议流程
+## 5. 本会话(从 e0f200c 到 f98254a)所有重大改动
 
-如果用户说“继续改 Cashlens”：
+按提交倒序:
 
-1. 先读这份 `HANDOFF.md`。
-2. `cd /tmp/cashlens-hk-audit-review`，确认 `git status --short` 干净。
-3. `git pull --ff-only origin main`。
-4. 搜索并读取 `index.html` 相关函数。
-5. 修改后本地开静态服务验证。
-6. 用浏览器实际打开页面，做至少一轮 console 验证。
-7. commit + push。
-8. 打开 GitHub Pages 线上 URL，加 `?verify=<commit>` 避免缓存。
-9. 把验证结果用中文简洁汇报给用户。
-
----
-
-## 11. 如果要继续修 bug，优先级建议
-
-P0 / P1：
-- 添加 Playwright 或最小浏览器测试脚本，防止 XSS / 日期 / provider regression。
-- 检查 tour overlay 首次访问逻辑，避免遮挡或看起来“首屏不干净”。
-- 统一版本号：`APP_VERSION`、`PROMPT_VERSION`。
-
-P2：
-- 关于弹窗滚动体验。
-- 上传区域视觉比例。
-- Markdown 渲染质量。
-- 历史项目 localStorage 清理 / 导出。
-
-P3：
-- 真正的后端代理 / 登录 / 额度控制（用户之前不急）。
+| Commit | 内容 |
+|---|---|
+| `f98254a` | prompt 加输出顺序与长度策略 |
+| `c88f150` | audit-spinner 单圆 + toastLoading |
+| `bde97da` | 4 阶段进度感知 loader(替换循环动画) |
+| `ec98607` | 4 阶段审计风循环动画(audit-loader) |
+| `1bcee43` | prompt 强化 3 点(字段顺序硬约束/标题/分类一致性) |
+| `6111cc3` | JSON schema 字段类型/排序/上限约束精确化 |
+| `16221cf` | prompt v7.1 预览-确认-生成工作流 + Hero 卡片 |
+| `bdd663d` | 升级 prompt 到专业审计 schema(4 张专业 sheet) |
+| `bbc97c1` | mobile 端全套优化 |
+| `1f81363` | 修图表文字重叠 |
+| `45693c0` | 修图表 tab 空白(ECharts hidden init 0×0) |
+| `4decf5f` | Excel 4 套模板下拉 |
+| `5df5802` | AI 4 种风格化结论 |
+| `3b65e49` | 同名互转/董事往来识别字段 |
+| `8b44bba` | 删 onboarding 5 步注册引导 93 行 |
+| `d07b9df` | 精简 API Key 引导 |
+| `4e3548a` | B 方案 - 移除内置 API Key |
+| `e9b3f98` | Cloudflare Worker 反代框架(C 方案,未启用) |
+| `efa6169` | 默认切到 DeepSeek + 内置 key(后被 B 方案撤销) |
+| `288147b` | 默认 model gpt-5.4 → gpt-5.5(后被 efa6169 切到 deepseek-chat) |
+| `e0f200c` | 一键导出 Excel(模板月度矩阵 + 4 张明细) |
 
 ---
 
-## 12. 一句话状态摘要
+## 6. 当前已知问题
 
-Cashlens 当前线上可打开，最新 `f323390` 已修复报告 XSS、设置默认错乱、日期校验、CSV-only prompt 误判、custom Base URL 空请求、新分析状态残留和部分误导文案；下一步适合做首屏/教程体验、版本号统一和自动化测试。
+### 6.1 ⚠️ 用户报告"无法访问此网站"
+- 时间:本会话末尾,推完 `f98254a` 后用户反馈
+- 已 verify:`node new Function()` 检查 3 个 inline script syntax 全 OK
+- 最大概率:GitHub Pages 部署延迟(commit 推送 → Pages 重新构建需要 1-10 分钟)
+- 兜底排查:
+  1. https://github.com/zhongrenfei1-hub/cashlens-hk-audit/actions 看 Pages 部署状态
+  2. 强制刷新浏览器(Cmd+Shift+R) / 换 incognito 窗口测
+  3. 用 `?verify=f98254a` 这种 query 不影响,可去掉
+  4. 极少数情况怀疑 prompt 字符串里反引号转义出 bug:`git revert f98254a` 再 push 试试
+
+### 6.2 mobile 优化还未做完的小尾巴
+- mobile 上 artifact 全屏 modal 的滚动行为还有微细节(顶部 mobile-bar 跟主内容滚动同步)
+- 教程 tour mobile 直接居中,但首次访问的引导内容针对 desktop 元素(部分 step 因为 element hidden 自动跳过居中,可能客户感觉跳跃) — 真实用户测后再优化
+
+### 6.3 JSON Lines 降级路径前端未实现
+prompt 已要求笔数 > 200 时从 TSV 切 JSON Lines,但前端 `extractChartSpecs` / `buildTsvSheet` /
+`autoGenerateChartsFromTsv` 都只 parse TSV。等真实大批量场景出现再加 `parseJsonLines()`。
+
+### 6.4 ```chart 块前端未严格 schema 校验
+现有 `extractChartSpecs` 用 `JSON.parse` 直接 parse,若 AI 输出格式偏差(比如 `data` 里是字符串而非数字),
+`buildChartOption` 不会主动报错而是渲染空图。可加 schema check(but low priority)。
+
+---
+
+## 7. 关键代码位置(按行号)
+
+| 功能 | 起始行号(±) | 备注 |
+|---|---|---|
+| Header(顶部 nav) | 325 | 含响应式 hidden sm:flex 等 |
+| 空状态 + 上传区 | 480 | dropzone + 「⚠️ 请先在设置里填 API Key」横幅 |
+| Settings Modal | 720 | mobile 全屏化已加 |
+| `SYSTEM_PROMPT_V4` | 878 | v7.1 工作流 + 4 张 TSV schema + 长度策略 + 严格规则 |
+| `PROVIDERS` 配置 | ~1067 | 9 家服务商 + DeepSeek 默认 |
+| `DEFAULTS` | ~1248 | provider/apiKey/model;apiKey 已清空 |
+| `toast` / `toastLoading` | ~1910 | toastLoading 内嵌 audit-spinner |
+| `auditSpinnerHTML` | ~1932 | spinner 组件 |
+| `auditLoadingHTML` / `auditProgressHTML` / `startAuditProgress` | ~2200 | 3 种 loading |
+| `thinkingDots` | ~2280 | 现用 audit-progress |
+| `extractChartSpecs` | ~2880 | 抓 ```chart 块 |
+| `extractPreviewMetrics` | ~2999 | 抓 ```json preview_status 块 |
+| `renderPreviewHero` | ~3015 | Hero 卡片 HTML 生成 |
+| `confirmGenerateExcel` | ~3070 | CTA 按钮自动塞「确认生成Excel」+ sendFollowup |
+| `renderArtifactReport` | ~3083 | 入口:hero prepend + Markdown + chart + tables |
+| `autoGenerateChartsFromTsv` | ~2920 | 从 4 张 TSV 兜底生成 3 张图 |
+| `XLSX_THEMES` + `buildMatrixSheet` | ~3460 | 4 套主题 |
+| `addMonthlyDetailSheets` | ~3622 | 月度详细模板 |
+| `downloadXlsx` | ~3673 | 4 模板下拉入口,含 toastLoading |
+| `parseBalanceMatrix` | ~3450 | Markdown 月度矩阵 → Excel |
+| `entityCache` 函数族 | ~1100 | localStorage 同名/董事缓存 |
+| Tour `TOUR_STEPS` | ~3917 | 10 步教程 |
+| Init `DOMContentLoaded` | ~4178 | 初始化各种 |
+
+---
+
+## 8. 常用维护命令
+
+```bash
+# 进工作目录
+cd /Users/qiu/海荣香港/99_部署版
+
+# 拉远端(部署版本不一定是本地最新,接手前先 fetch)
+git fetch origin && git status
+
+# 看最近 commit
+git log --oneline -20
+
+# 启 preview server(launch.json 已配置)
+# Cashlens · 部署版 默认 port 8101,自动指向当前目录
+
+# 检查 syntax(改完 index.html 必跑)
+node -e "const fs=require('fs'); const html=fs.readFileSync('index.html','utf8'); const m=html.match(/<script[^>]*>([\\s\\S]*?)<\\/script>/g); m.filter(s=>!s.includes('src=')).forEach((s,i)=>{ try { new Function(s.replace(/^<script[^>]*>/,'').replace(/<\\/script>$/,'')); console.log(i,'OK'); } catch(e){ console.log(i,'ERR',e.message); }});"
+
+# commit 推送(GitHub Pages 自动部署)
+git add index.html && git commit -m "..." && git push origin main
+```
+
+---
+
+## 9. 给下一个 AI 的接手流程
+
+1. **打开 https://zhongrenfei1-hub.github.io/cashlens-hk-audit/** 验证线上能打开(本会话末用户报告无法访问)
+2. **看 git log -10** 了解最近改了什么
+3. **跑 syntax check 命令** 确认 inline script 都 OK
+4. **理解 v7.1 工作流**(预览 → 确认 → 生成),这是当前 prompt 核心
+5. **理解 4 张 TSV schema** 和前端解析依赖关系(改字段名要同步前端 regex)
+6. **读用户最新一句话再决定下一步**
+
+### 改动注意事项
+
+#### 改 SYSTEM_PROMPT_V4 的反引号
+prompt 里要描述 ` ```tsv ` / ` ```json ` 时,反引号必须**三重转义** `\\\`\\\`\\\``(template literal 内)。
+否则反引号会闭合 template literal,导致 JS 语法错误 → 整个网站白屏。
+改完**必跑** syntax check 再 push。
+
+#### 改 4 张 TSV 字段
+- 字段名不要随便改(前端 `autoGenerateChartsFromTsv` 字段查找的 regex 依赖)
+- 顺序也不能改(prompt 里写了"严格此顺序")
+- 加新字段:在 prompt schema 里末尾加 + 前端 regex 加 fallback
+
+#### 改 mobile 样式
+看 head `<style>` 里的 `@media (max-width: 639px)` / `1023px` / `1279px` 几个断点,Cashlens 用的是:
+- &lt; 640px = mobile(纯单列)
+- 640-1023 = tablet(无 sidebar)
+- 1024-1279 = desktop 中(有 sidebar 无 artifact)
+- ≥ 1280 = 三列全开
+
+---
+
+## 10. 下一步优先级建议
+
+按用户当前关注度排序:
+
+1. **Verify 线上能打开** — 用户最新报"无法访问",先解决
+2. **真实跑一份分析看 v7.1 输出是否符合 prompt 规格**(预览 → 确认 → 生成 / 4 张 TSV / JSON 概要 / 4 风格 / 横线分隔等)
+   — 如果 AI 输出哪里没按规格,加更狠的 prompt 措辞或加前端容错
+3. **mobile 真机实测** — preview headless 浏览器只能模拟,真机滚动、键盘弹出、安全区可能还有边角问题
+4. **Excel 4 套模板让客户挑** — 客户说哪套保留,删其余,清理代码
+5. **Cloudflare Worker** — 如果客户改主意想隐藏 key,按 `cloudflare-worker/README.md` 部署
+6. **JSON Lines 前端解析** — 等真实 200+ 笔交易场景再加
+
+---
+
+**文档维护原则:** 每次大改完顺手更新这份 HANDOFF.md(尤其当 prompt 改动 / 新增 commit 群 / fix 重大 bug 后),让下一个 AI 一眼看懂状态。
