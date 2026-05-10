@@ -3,15 +3,73 @@
 > 给下一个 AI / Claude / Codex 看。新会话开始时把这份贴进去,然后说:
 > "接着这份 HANDOFF.md 继续帮我做 Cashlens,我现在要:[新需求]"。
 
-**最后更新:** 2026-05-09 (接近上下文上限切换会话前的快照)
+**最后更新:** 2026-05-10(接近上下文上限,切换会话前的快照)
 **最新已推送:** `f98254a chore: prompt 加「输出顺序与长度策略」段(防 max_tokens 截断)`
 
-⚠️ **接手第一件事:** 浏览器打开 https://zhongrenfei1-hub.github.io/cashlens-hk-audit/ 验证能否打开。
-本会话末用户报告"无法访问此网站",我已用 `node new Function()` 验证 3 个 inline script syntax 全 OK,
-所以**最大概率是 GitHub Pages 部署延迟**(推 commit 后 1-10 分钟才生效)。
-若打开仍 404 / 白屏:
-1. 看 https://github.com/zhongrenfei1-hub/cashlens-hk-audit/actions Pages 部署日志
-2. 极少数情况是 prompt 字符串里反引号 `\`` 转义出 bug — 我 grep 过 line 1376-1382 的反引号都正确转义了 `\\\`\\\`\\\``,但若新 AI 怀疑可临时回滚 `git revert f98254a` 再 push
+---
+
+## 🎯 你的任务(对下一个 AI · 必读)
+
+**用户和上一个 AI 在持续迭代 Cashlens,你也接着做** — 不是来"了解项目"就完事,是来继续干的。
+
+### 立即要做(优先级 1):
+**打开 https://zhongrenfei1-hub.github.io/cashlens-hk-audit/ 验证能否访问。**
+上一会话末用户报告"无法访问此网站"。我已用 `node new Function()` 验证 3 个 inline script syntax 全 OK,
+**最大概率是 GitHub Pages 部署延迟**(推 commit 后 1-10 分钟才生效)。
+- ✅ 能正常打开 → 跟用户确认 → 继续接他下一句话
+- ❌ 仍 404 / 白屏 → 先看 https://github.com/zhongrenfei1-hub/cashlens-hk-audit/actions Pages 部署状态;
+  必要时 `git revert f98254a && git push` 回滚最近 prompt 改动再排查
+
+### 持续要做(优先级 2):
+
+**A. 这份 HANDOFF.md 是活文档,不是一次性快照。**
+每次对话有重要变化(prompt 改 / 新功能 / 修 bug / 默认值变化)都要**顺手 update + commit + push**。
+不要等用户提才更新。变化大就重写,变化小就 patch。**HANDOFF 永远是当前状态的真实镜像**。
+
+**B. 接住用户每次的需求,直接干。**
+用户大方向是把 Cashlens 做成"香港中小企业审计 SaaS"。细节由他每次提出。
+你的工作是:接需求 → 看 HANDOFF / 现状 → 评估方案 → 直接干 → 验证 → push → 给用户 verify URL。
+
+### 你有的权限(用户已明确授权 — 不用每次问):
+- ✅ 直接改代码(`Edit` / `Write`,不用问"要不要改")
+- ✅ 直接 commit + push 到 main(GitHub Pages 自动部署)
+- ✅ 直接改这份 HANDOFF.md + push(让下下个 AI 跟得上)
+- ✅ 直接加 CDN 脚本 / 新前端依赖(若合理)
+- ✅ 删旧代码(若某次新引入的功能用户最后说不要,直接清理)
+- ✅ 改 prompt 字符串(改完必跑 syntax check 命令)
+
+### 不要做的:
+- ❌ 不要重写整个 index.html(要 incremental edit,Edit 工具改局部)
+- ❌ 不要改 git config / 强制 push / `--no-verify` 跳 hook
+- ❌ 不要改默认 provider / 大改 prompt 框架 / 删核心功能 — **这种重大架构变化先用 2-3 句方案 + trade-off 让用户拍板**
+- ❌ 不要在 HANDOFF / commit message / 聊天里展开任何完整 API key,统一用 `[REDACTED]`
+
+### 用户工作风格(必须适配):
+- **直接干,直接验证,直接推** — 不啰嗦,不每事必请示
+- 中文沟通(中英混合 OK)
+- 探索性问题(怎么做更好?)用 2-3 句给方案 + trade-off 让他拍板,不直接动手
+- 明确指令(直接干这个)立刻动手,不再问
+- 报错 / 未确认的疑问 / 风险点 **主动说**,不要装看不见
+- 改完报告 verify URL 让用户立刻能打开看
+- 偏好"专业 SaaS"美学(Linear/Vercel),不要卡通风,emoji 不要泛滥
+
+### 快速热身 checklist(接手 5 分钟内):
+```bash
+# 1. 切到工作目录
+cd /Users/qiu/海荣香港/99_部署版
+
+# 2. 拉远端最新
+git fetch origin && git status
+
+# 3. 看最近 5 个 commit
+git log --oneline -5
+
+# 4. 跑 syntax check 确保 inline script 没破
+node -e "const fs=require('fs'); const html=fs.readFileSync('index.html','utf8'); const m=html.match(/<script[^>]*>([\\s\\S]*?)<\\/script>/g); m.filter(s=>!s.includes('src=')).forEach((s,i)=>{ try { new Function(s.replace(/^<script[^>]*>/,'').replace(/<\\/script>$/,'')); console.log(i,'OK'); } catch(e){ console.log(i,'ERR',e.message); }});"
+
+# 5. 启 preview server (launch.json 里 "Cashlens · 部署版" port 8101)
+# 然后浏览器打开 http://localhost:8101 看跟线上是否一致
+```
 
 ---
 
