@@ -716,6 +716,158 @@ tailwind.config = {
     .preview-hero .hero-stats { grid-template-columns: repeat(3, 1fr); gap: 6px; }
     .preview-hero .stat-value { font-size: 16px; }
   }
+
+  /* ─────── Excel 预览 tab(模拟 .xlsx 在 Excel 里打开的样子) ─────── */
+  .excel-banner {
+    background: linear-gradient(135deg, hsl(262 93% 25% / 0.4) 0%, hsl(327 98% 30% / 0.3) 100%);
+    border-left: 3px solid hsl(262 93% 69%);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .excel-banner-title {
+    font-family: "Instrument Serif", ui-serif, Georgia, serif;
+    font-size: 18px; color: hsl(0 0% 95%); letter-spacing: -0.01em;
+  }
+  .excel-banner-meta {
+    font-size: 11.5px; color: hsl(0 0% 65%); margin-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .excel-tabs {
+    display: flex; gap: 2px;
+    border-bottom: 1px solid hsl(0 0% 14.9%);
+    overflow-x: auto;
+    margin-bottom: -1px;
+    padding-bottom: 0;
+  }
+  .excel-tabs::-webkit-scrollbar { height: 4px; }
+  .excel-tab {
+    padding: 6px 12px;
+    font-size: 11.5px; font-weight: 500;
+    color: hsl(0 0% 60%);
+    background: hsl(0 0% 6%);
+    border: 1px solid hsl(0 0% 14.9%);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    white-space: nowrap;
+    display: flex; align-items: center; gap: 5px;
+    cursor: pointer;
+    transition: all 120ms;
+  }
+  .excel-tab:hover { color: hsl(0 0% 90%); background: hsl(0 0% 9%); }
+  .excel-tab.active {
+    background: hsl(276 63% 6%);
+    color: hsl(0 0% 98%);
+    font-weight: 600;
+    border-color: hsl(0 0% 18%);
+    position: relative; z-index: 1;
+  }
+  .excel-tab .excel-tab-badge {
+    font-size: 9.5px; padding: 1px 5px;
+    border-radius: 3px;
+    background: hsl(262 93% 25% / 0.5);
+    color: hsl(262 80% 85%);
+    font-weight: 500;
+  }
+  .excel-tab.aux .excel-tab-badge {
+    background: hsl(0 0% 14%); color: hsl(0 0% 60%);
+  }
+  .excel-meta-rows {
+    background: hsl(0 0% 8%);
+    border: 1px solid hsl(0 0% 14%);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    font-size: 11.5px;
+    color: hsl(0 0% 75%);
+    font-style: italic;
+  }
+  .excel-meta-rows .excel-meta-key { color: hsl(0 0% 92%); font-weight: 500; font-style: normal; }
+  .excel-grid-wrap {
+    border: 1px solid hsl(0 0% 14.9%);
+    border-radius: 0 8px 8px 8px;
+    overflow: auto;
+    max-height: 65vh;
+    background: hsl(276 63% 5%);
+  }
+  .excel-grid-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+  .excel-grid-wrap::-webkit-scrollbar-thumb { background: hsl(0 0% 22% / 0.6); border-radius: 999px; }
+  .excel-grid {
+    border-collapse: collapse;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    width: 100%;
+  }
+  .excel-grid .excel-col-letters td {
+    background: hsl(0 0% 8%);
+    color: hsl(0 0% 48%);
+    font-size: 10.5px;
+    text-align: center;
+    padding: 3px 8px;
+    border-right: 1px solid hsl(0 0% 14%);
+    border-bottom: 1px solid hsl(0 0% 18%);
+    font-weight: 500;
+    position: sticky; top: 0; z-index: 3;
+  }
+  .excel-grid .excel-corner {
+    width: 38px;
+    background: hsl(0 0% 8%);
+    border-right: 1px solid hsl(0 0% 18%);
+    position: sticky; left: 0; z-index: 4;
+  }
+  .excel-grid .excel-row-num {
+    width: 38px;
+    background: hsl(0 0% 8%);
+    color: hsl(0 0% 50%);
+    font-size: 10.5px;
+    text-align: center;
+    padding: 4px 6px;
+    border-right: 1px solid hsl(0 0% 14%);
+    border-bottom: 1px solid hsl(0 0% 12%);
+    font-weight: 500;
+    position: sticky; left: 0; z-index: 2;
+  }
+  .excel-grid .excel-header-row th {
+    background: linear-gradient(180deg, hsl(262 93% 25% / 0.55) 0%, hsl(262 93% 20% / 0.45) 100%);
+    color: hsl(0 0% 95%);
+    font-size: 11.5px;
+    font-weight: 600;
+    text-align: left;
+    padding: 7px 10px;
+    border-right: 1px solid hsl(262 93% 35% / 0.4);
+    border-bottom: 2px solid hsl(262 93% 50% / 0.6);
+    white-space: nowrap;
+    position: sticky; top: 22px; z-index: 2;
+  }
+  .excel-grid .excel-header-row td.excel-row-num {
+    background: hsl(262 93% 20% / 0.55);
+    position: sticky; top: 22px; left: 0; z-index: 3;
+  }
+  .excel-grid tbody td {
+    padding: 5px 10px;
+    border-right: 1px solid hsl(0 0% 12%);
+    border-bottom: 1px solid hsl(0 0% 10%);
+    color: hsl(0 0% 86%);
+    white-space: nowrap;
+  }
+  .excel-grid tbody tr:hover td:not(.excel-row-num) { background: hsl(270 50% 20% / 0.15); }
+  .excel-grid tbody td.excel-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .excel-footer {
+    margin-top: 6px;
+    padding: 6px 12px;
+    background: hsl(0 0% 8%);
+    border: 1px solid hsl(0 0% 14%);
+    border-radius: 6px;
+    font-size: 11px;
+    color: hsl(0 0% 55%);
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 639px) {
+    .excel-tab { padding: 5px 9px; font-size: 11px; }
+    .excel-grid { font-size: 11px; }
+    .excel-grid .excel-header-row th { font-size: 10.5px; padding: 6px 8px; }
+    .excel-grid tbody td { padding: 4px 8px; }
+  }
 </style>
 </head>
 <body class="bg-base text-fg1 font-sans h-screen overflow-hidden">
@@ -1017,6 +1169,8 @@ tailwind.config = {
               class="art-tab px-3 py-1 rounded-md text-[12px] font-medium text-fg2 hover:bg-elevated hover:text-fg1">📈 图表</button>
       <button onclick="switchArtifactTab('tables')" data-tab="tables"
               class="art-tab px-3 py-1 rounded-md text-[12px] font-medium text-fg2 hover:bg-elevated hover:text-fg1">📊 数据表</button>
+      <button onclick="switchArtifactTab('excel')" data-tab="excel"
+              class="art-tab px-3 py-1 rounded-md text-[12px] font-medium text-fg2 hover:bg-elevated hover:text-fg1">📋 Excel 预览</button>
     </div>
 
     <!-- Default content (info mode) -->
@@ -1047,6 +1201,7 @@ tailwind.config = {
       <div id="artifactReportTab" class="art-pane md p-5 text-[13.5px] text-fg1 leading-relaxed"></div>
       <div id="artifactChartsTab" class="art-pane hidden p-5 space-y-5"></div>
       <div id="artifactTablesTab" class="art-pane hidden p-5 space-y-5"></div>
+      <div id="artifactExcelTab" class="art-pane hidden p-5"></div>
     </div>
 
     <!-- Footer toolbar (in report mode) -->
@@ -3253,8 +3408,148 @@ function renderArtifactReport(text) {
     }).join('');
   }
 
+  // Excel 预览 tab(模拟 .xlsx 在 Excel 打开的样子)
+  renderExcelPreview(text, previewPayload);
+
   document.getElementById('artifactStatus').textContent = `${text.length.toLocaleString()} 字符`;
   switchArtifactTab(__artifactTab);
+}
+
+// ─────────── Excel 预览 tab ───────────
+// 解析 5 张 ```tsv 块,以"模拟 Excel 打开 .xlsx" 视觉风格渲染(顶部 sheet 切换 + 列字母 + 行号 + 紫色 banner 表头)。
+// META 头(Sheet 5)单独显示在表格上方斜体灰底。
+let __excelPreviewActiveSheet = 0;
+
+const TSV_SHEET_META = [
+  { name: 'Transaction_Detail',       label: '主表 · debit 存入交易明细', type: 'main' },
+  { name: 'Monthly_Summary',          label: '月度有效进账汇总',         type: 'main' },
+  { name: 'Exclusion_Summary',        label: '排除项目类别汇总',         type: 'aux'  },
+  { name: 'Related_Party_Inflow',     label: '关联方汇入款单独列出',     type: 'aux'  },
+  { name: 'Miheng_Movement_Summary',  label: '月度外币运动汇总',         type: 'aux'  },
+];
+
+function parseTsvSheet(rawTsv) {
+  const lines = rawTsv.split('\n').filter(l => l.trim().length);
+  if (!lines.length) return { metaRows: [], headers: [], rows: [] };
+  let metaIdx = 0;
+  while (metaIdx < lines.length && lines[metaIdx].startsWith('META\t')) metaIdx++;
+  const metaRows = lines.slice(0, metaIdx).map(l => l.split('\t'));
+  const headers = (lines[metaIdx] || '').split('\t');
+  const rows = lines.slice(metaIdx + 1).map(l => l.split('\t'));
+  return { metaRows, headers, rows };
+}
+
+function colLetter(idx) {
+  // 0 → A, 1 → B, ..., 25 → Z, 26 → AA, ...
+  let s = '';
+  let n = idx;
+  while (true) {
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+    if (n < 0) break;
+  }
+  return s;
+}
+
+function renderExcelPreview(text, previewPayload) {
+  const el = document.getElementById('artifactExcelTab');
+  if (!el) return;
+  const matches = [...(text || '').matchAll(/```tsv\s*\n([\s\S]*?)```/g)];
+  if (matches.length === 0) {
+    el.innerHTML = '<div class="text-[12px] text-fg3 p-4 text-center">报告中未找到 <code>```tsv</code> 数据表 · Excel 预览需要先完成一次分析</div>';
+    return;
+  }
+
+  const company = (document.getElementById('companyLabel')?.textContent || '').trim() || '未命名公司';
+  const period = previewPayload?.period || '';
+  const filename = `${company.replace(/\s+/g, '_')}_统计流水${period ? '_' + period.replace(/[.\s—-]+/g, '-') : ''}.xlsx`;
+
+  const sheets = matches.map((m, i) => ({
+    ...TSV_SHEET_META[i] || { name: `Sheet ${i+1}`, label: '', type: 'aux' },
+    ...parseTsvSheet(m[1].trim())
+  }));
+
+  if (__excelPreviewActiveSheet >= sheets.length) __excelPreviewActiveSheet = 0;
+  const active = sheets[__excelPreviewActiveSheet];
+
+  // Sheet 切换 tabs(顶部,模拟 Excel 底部 sheet tabs 但放顶部更直观)
+  const tabsHtml = sheets.map((s, i) => `
+    <button onclick="setExcelSheet(${i})" data-excel-tab="${i}"
+            class="excel-tab ${i === __excelPreviewActiveSheet ? 'active' : ''} ${s.type === 'aux' ? 'aux' : ''}"
+            title="${escapeHtml(s.label)}">
+      <span>${escapeHtml(s.name)}</span>
+      <span class="excel-tab-badge">${s.type === 'main' ? '主交付' : '辅助'}</span>
+    </button>
+  `).join('');
+
+  // META rows(Sheet 5 等)
+  const metaHtml = active.metaRows.length ? `
+    <div class="excel-meta-rows">
+      ${active.metaRows.map(r => `<div><span class="excel-meta-key">${escapeHtml(r[1] || '')}</span>: ${escapeHtml(r.slice(2).join(' '))}</div>`).join('')}
+    </div>
+  ` : '';
+
+  // Data grid(列字母 + 行号 + 表头 + 数据行)
+  let gridHtml;
+  if (!active.headers.length) {
+    gridHtml = `<div class="excel-grid-wrap" style="padding:24px; text-align:center; color:hsl(0 0% 50%); font-size:12px;">该 Sheet 无内容</div>`;
+  } else {
+    const MAX_ROWS = 100;
+    const isNum = (s) => /^-?[\d,]+(\.\d+)?$/.test(String(s || '').trim());
+    const colLettersRow = `
+      <tr class="excel-col-letters">
+        <td class="excel-corner"></td>
+        ${active.headers.map((_, idx) => `<td>${colLetter(idx)}</td>`).join('')}
+      </tr>
+    `;
+    const headerRow = `
+      <tr class="excel-header-row">
+        <td class="excel-row-num">1</td>
+        ${active.headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}
+      </tr>
+    `;
+    const dataRows = active.rows.slice(0, MAX_ROWS).map((r, ri) => `
+      <tr>
+        <td class="excel-row-num">${ri + 2}</td>
+        ${active.headers.map((_, ci) => {
+          const c = r[ci] !== undefined ? r[ci] : '';
+          return `<td class="${isNum(c) ? 'excel-num' : ''}">${escapeHtml(c)}</td>`;
+        }).join('')}
+      </tr>
+    `).join('');
+    gridHtml = `
+      <div class="excel-grid-wrap scrollbar">
+        <table class="excel-grid">
+          <thead>${colLettersRow}${headerRow}</thead>
+          <tbody>${dataRows}</tbody>
+        </table>
+      </div>
+      <div class="excel-footer">
+        ${active.rows.length > MAX_ROWS
+          ? `仅显示前 ${MAX_ROWS} 行 · 共 ${active.rows.length} 行 × ${active.headers.length} 列 · 完整数据请点底部 <span class="text-accent2">📊 下载 .xlsx</span>`
+          : `共 ${active.rows.length} 行 × ${active.headers.length} 列`}
+      </div>
+    `;
+  }
+
+  el.innerHTML = `
+    <div class="excel-banner">
+      <div class="excel-banner-title">📋 ${escapeHtml(filename)}</div>
+      <div class="excel-banner-meta">${escapeHtml(active.name)} · ${escapeHtml(active.label)} · ${active.type === 'main' ? '主交付(给"做账审计板块"读取)' : '辅助(客户参考)'}</div>
+    </div>
+    <div class="excel-tabs">${tabsHtml}</div>
+    ${metaHtml}
+    ${gridHtml}
+  `;
+}
+
+function setExcelSheet(idx) {
+  __excelPreviewActiveSheet = idx;
+  const text = window.__latestReport || '';
+  if (!text) return;
+  let payload = null;
+  try { payload = extractPreviewMetrics(text); } catch {}
+  renderExcelPreview(text, payload);
 }
 
 function copyArtifact() {
