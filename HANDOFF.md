@@ -3,8 +3,8 @@
 > 给下一个 AI / Claude / Codex 看。新会话开始时把这份贴进去,然后说:
 > "接着这份 HANDOFF.md 继续帮我做 Cashlens,我现在要:[新需求]"。
 
-**最后更新:** 2026-05-11(**v8.0 去做账审计化大改 + 待确认事项迭代流程**:角色重新定位为「统计流水」专家 + 字段重命名 + Sheet 4 改名 + 删引用 tab + ~35 处文案扫)
-**最新已推送:** v8.0 大改 — 见最新 commit · `git log -5`
+**最后更新:** 2026-05-11(**v8.1 双板块架构**:新增 `audit.html` 做账审计板块 placeholder + `sendToAuditModule` handoff 机制 + 顶部 nav 切换链接 + 同源 localStorage 共享)
+**最新已推送:** v8.1 双板块 — 见最新 commit · `git log -3`
 
 ---
 
@@ -78,10 +78,10 @@ node -e "const fs=require('fs'); const html=fs.readFileSync('index.html','utf8')
 | 项 | 值 |
 |---|---|
 | 项目名 | Cashlens(现金透镜)— 香港 SME 银行月结单「统计流水」工具(仅 debit 存入,不涉及做账/审计/税项) |
-| 线上地址 | https://zhongrenfei1-hub.github.io/cashlens-hk-audit/ |
+| 线上地址 | 统计流水板块 `/` · 做账审计板块 `/audit.html`(都在 https://zhongrenfei1-hub.github.io/cashlens-hk-audit/) |
 | GitHub 仓库 | https://github.com/zhongrenfei1-hub/cashlens-hk-audit |
 | 部署方式 | GitHub Pages,推送 `main` 后自动部署(1-10 分钟) |
-| 当前主文件 | `index.html`(单文件前端应用,~4500 行) |
+| 当前主文件 | `index.html`(统计流水板块 · ~5000 行)+ `audit.html`(做账审计板块 placeholder · ~300 行) |
 | 本地工作目录 | `/Users/qiu/海荣香港/99_部署版` |
 | Preview server | 名为 "Cashlens · 部署版" 的 launch 配置,port 8101 |
 | 当前分支 | `main` |
@@ -315,6 +315,48 @@ JSON schema(```json 块字段约束):
 
 `setExportButtonsDisabled(disabled)` helper 同步控制 4 个 export 按钮的 disabled 状态(顶部 2 + mobile-bar 2)。
 
+### 4.13 双板块架构(v8.1 新增 · 统计流水 + 做账审计)
+
+**两个独立 HTML / 两个独立 URL / 同源 localStorage 自动共享**:
+- `index.html`(`/`)= 统计流水板块(当前主功能 · ~5000 行)
+- `audit.html`(`/audit.html`)= 做账审计板块(placeholder + handoff 接收 · ~300 行)
+
+**自动共享(同源 localStorage,零代码)**:
+- API key / provider / model / settings
+- 历史项目(`cashlens_projects_v1`)
+- 同名互转 / 董事缓存(`cashlens_entity_cache_v1`)
+
+**业务数据 handoff(显式 push 模式)**:
+- localStorage key: `cashlens_handoff_v1`
+- 统计流水板块:artifact toolbar 的 `📤 发送到做账审计` 按钮 → `sendToAuditModule()`(`index.html` 内)→ 把当前 `window.__latestReport` 的 5 张 TSV + metrics + 公司/期间存到 localStorage → 自动跳 `/audit.html`(700ms 延迟让 toast 显示)
+- 做账审计板块:`init()` 检测 `localStorage[HANDOFF_KEY]`,有数据 → 渲染 hero 卡 + 5 张 TSV 预览;无数据 → 渲染 empty state + 跳回统计流水板块 CTA
+- 实时同步:监听 `storage` 事件,另一标签页 push 时自动刷新
+
+**Handoff payload schema**:
+```js
+{
+  company: string,           // 公司名(从 #companyLabel 取)
+  period: string,            // "YYYY-MM-DD — YYYY-MM-DD" 或 metrics.period
+  receivedAt: ISO timestamp,
+  metrics: {                 // 从 extractPreviewMetrics() 拿;可能为空对象
+    valid_inbound_hkd, total_count, valid_count, excluded_count,
+    currency_breakdown, top_customers, period
+  },
+  tsvBlocks: string[],       // 通常 5 张 TSV(主交付 Sheet 1/2 + 辅助 3/4/5)
+  rawReport: string          // 完整 markdown 报告(后续做账审计逻辑可能用)
+}
+```
+
+**跨板块切换 UI**:
+- `index.html` 顶部 nav:`📚 做账审计 →` 链接到 `/audit.html`(`md:flex` desktop 显示;mobile 因空间不够隐藏)
+- `audit.html` 顶部 nav:`📊 统计流水 →` 链接回 `/`(始终显示)
+- `audit.html` 无独立 Settings UI(跳回 `index.html` 改);Footer 有提示链接
+
+**做账审计板块当前内容(placeholder · 待实现)**:
+- Empty state:无 handoff 数据 → "暂无数据" + 跳统计流水板块 CTA
+- Received state:有 handoff 数据 → Hero 卡(公司 + 期间 + 接收时间 + 3 指标 + 清除/复制全部 TSV 按钮)+ 5 张 TSV 预览表(标记主交付 vs 辅助)+ "做账审计功能开发中" 占位
+- 真正的做账审计逻辑(prompt / output / schema / AI 调用)留以后做,届时把 SYSTEM_PROMPT_AUDIT 之类的常量塞进 audit.html
+
 ---
 
 ## 5. 本会话(从 e0f200c 到 f98254a)所有重大改动
@@ -323,7 +365,8 @@ JSON schema(```json 块字段约束):
 
 | Commit | 内容 |
 |---|---|
-| (本次 · v8.0) | **去做账审计化大改 + 待确认事项迭代流程**:角色定位「统计流水」专家;prompt 加 [核心使命] + [不确定性处理规则] + 末尾固定提示语;Sheet 4 `Related_Party_Transactions` → `Related_Party_Inflow`;字段重命名 `audit_note` → `note` / `disclosure_note` → `note` / `representative_audit_note` → `representative_note`;Sheet 3/4 `citation` 列全删;风格化结论 4 选 1 → 3 选 1(删审计师/财务总监视角);删月度矩阵 Markdown 附加内容(Sheet 5 已覆盖);前端引用 tab 整删(parser + HTML + 按钮 + reset 列表 + chip);前端 ~15 处文案去 HKSA / IRO / DIPN / SME-FRS / BIR51 / 管理层声明书 / 工作底稿 / 审计报告 / 审计师事务所;[严格执行规则] 3 条硬约束(debit-only + 去做账审计化 + 不猜测);followup chip 删 "按 BIR51 格式重新输出" / "生成审计调整分录建议" |
+| (本次 · v8.1) | **双板块架构 · 新增 audit.html 做账审计板块 + handoff 机制**:同仓库新增 `audit.html`(~300 行,独立 URL `/audit.html`);同源 localStorage 自动共享 settings / 历史项目;新增 `sendToAuditModule()` JS + artifact toolbar 「📤 发送到做账审计」按钮(push 模式 · 把 5 张 TSV + metrics + 公司/期间存到 `localStorage["cashlens_handoff_v1"]` 然后跳 audit.html);audit.html 包含 Empty state + Received state(Hero 卡 + 5 张 TSV 预览 + 复制全部 / 清除按钮)+ storage 事件实时同步;index.html 顶部 nav 加 「📚 做账审计 →」desktop 切换链接;HANDOFF section 4.13 新增双板块架构说明 |
+| `b47549c` | **v8.0 去做账审计化大改 + 待确认事项迭代流程**:角色定位「统计流水」专家;prompt 加 [核心使命] + [不确定性处理规则] + 末尾固定提示语;Sheet 4 `Related_Party_Transactions` → `Related_Party_Inflow`;字段重命名 `audit_note` → `note` / `disclosure_note` → `note` / `representative_audit_note` → `representative_note`;Sheet 3/4 `citation` 列全删;风格化结论 4 选 1 → 3 选 1(删审计师/财务总监视角);删月度矩阵 Markdown 附加内容(Sheet 5 已覆盖);前端引用 tab 整删;前端 ~15 处文案去 HKSA / IRO / DIPN / SME-FRS / BIR51 / 管理层声明书 / 工作底稿 / 审计报告 / 审计师事务所;[严格执行规则] 3 条硬约束;followup chip 删 "按 BIR51 格式重新输出" / "生成审计调整分录建议" |
 | `4daf4ce` | prompt debit-only 修正:credit 出账整行跳过,Sheet 1 永远 ≥ 0;classification 去"出账"枚举;前端文案去"出账" |
 | `348262b` | Sheet 5 · Miheng_Movement_Summary 月度外币运动汇总:prompt 加 schema(META 头 + 9 列 + row_type 枚举 + 加总自验)+ 前端 `buildTsvSheet` 加 META 解析 / row_type 列隐藏 / `fc_*` 数字格式 |
 | `f98254a` | prompt 加输出顺序与长度策略 |

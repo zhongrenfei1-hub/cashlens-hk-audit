@@ -36,11 +36,13 @@
 
 ```
 99_部署版/
-├── index.html      # 单文件应用(~50 KB,自带 Tailwind CDN)
+├── index.html      # 统计流水板块(主功能,~5000 行,自带 Tailwind CDN)
+├── audit.html      # 做账审计板块(placeholder + handoff 接收,~300 行)
+├── HANDOFF.md      # 给下一个 AI 的接手指南
 └── README.md       # 本文档
 ```
 
-仅需 `index.html` 一个文件,其他全是文档和注释。
+**双板块架构**(v8.1):`index.html` = 统计流水(只算 debit 存入);`audit.html` = 做账审计板块(placeholder,从统计流水接收数据)。两个文件部署到同一 GitHub Pages,**同源 localStorage 自动共享**(API key / settings / 历史项目);**业务数据通过 `📤 发送到做账审计板块` 按钮**(localStorage handoff key `cashlens_handoff_v1`)从统计流水流到做账审计。两个板块都仅需访问对应 URL 即可。
 
 ## 🚀 部署方式(选其一)
 

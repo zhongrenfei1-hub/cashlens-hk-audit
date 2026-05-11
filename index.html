@@ -740,6 +740,11 @@ tailwind.config = {
     <svg class="w-3.5 h-3.5 text-fg3 flex-shrink-0" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
   </button>
 
+  <!-- 板块切换:跳到做账审计板块(共享 localStorage) -->
+  <a href="audit.html" class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-elevated text-[12.5px] text-fg2 hover:text-fg1 transition border border-subtle" title="切换到做账审计板块(数据通过 localStorage 共享)">
+    <span>📚</span><span>做账审计</span><span class="text-fg3">→</span>
+  </a>
+
   <div class="flex-1"></div>
 
   <div id="ctxChip" class="chip bg-surface border border-subtle text-fg2 hidden md:inline-flex" title="当前模型上下文用量">
@@ -1057,6 +1062,9 @@ tailwind.config = {
       </button>
       <button onclick="downloadXlsx()" class="px-2.5 py-1.5 rounded-md hover:bg-elevated text-[11.5px] text-fg2 hover:text-fg1 flex items-center gap-1" title="导出 Excel(模板月度矩阵 + 5 张 TSV sheet)">
         <span>📊</span><span>下载 .xlsx</span>
+      </button>
+      <button onclick="sendToAuditModule()" class="px-2.5 py-1.5 rounded-md hover:bg-elevated text-[11.5px] text-accent2 hover:text-fg1 flex items-center gap-1 ml-1" title="发送主交付 TSV 到做账审计板块(共享 localStorage,自动跳转)">
+        <span>📤</span><span>发送到做账审计</span>
       </button>
       <div class="flex-1"></div>
       <span id="artifactStatus" class="text-[10.5px] text-fg3 mr-2"></span>
@@ -3224,6 +3232,57 @@ function downloadTsv(idx, content) {
   a.download = `Sheet${idx+1}_${SHEETS[idx] || 'data'}.tsv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ─────────── Handoff to 做账审计板块 (audit.html) ───────────
+// 主交付 = Transaction_Detail.tsv + Monthly_Summary.tsv;辅助 = Sheet 3/4/5。
+// 把 5 张 TSV + metrics + 公司/期间元数据写入 localStorage[HANDOFF_KEY],
+// 然后跳 audit.html。同源 localStorage,audit.html 自动读到。
+const HANDOFF_KEY = 'cashlens_handoff_v1';
+
+function sendToAuditModule() {
+  const text = window.__latestReport;
+  if (!text) {
+    toast('暂无报告 · 请先完成一次分析', 'warn');
+    return;
+  }
+  const tsvBlocks = [...text.matchAll(/```tsv\s*\n([\s\S]*?)```/g)].map(m => m[1].trim());
+  if (tsvBlocks.length === 0) {
+    toast('未找到 TSV 数据块 · 无法发送', 'warn');
+    return;
+  }
+  let metrics = {};
+  try {
+    if (typeof extractPreviewMetrics === 'function') {
+      metrics = extractPreviewMetrics(text) || {};
+    }
+  } catch (e) { console.warn('extract metrics failed', e); }
+
+  const company = (document.getElementById('companyLabel')?.textContent
+    || document.getElementById('companyInput')?.value || '').trim();
+  const periodStart = document.getElementById('periodStart')?.value || '';
+  const periodEnd = document.getElementById('periodEnd')?.value || '';
+  const period = (periodStart && periodEnd)
+    ? `${periodStart} — ${periodEnd}`
+    : (metrics.period || '');
+
+  const payload = {
+    company,
+    period,
+    receivedAt: new Date().toISOString(),
+    metrics,
+    tsvBlocks,
+    rawReport: text
+  };
+  try {
+    localStorage.setItem(HANDOFF_KEY, JSON.stringify(payload));
+  } catch (e) {
+    console.error('handoff save failed', e);
+    toast('保存失败(localStorage 可能已满):' + (e?.message || ''), 'err');
+    return;
+  }
+  toast(`已发送 ${tsvBlocks.length} 张 TSV 到做账审计板块 · 跳转中...`, 'ok');
+  setTimeout(() => { window.location.href = 'audit.html'; }, 700);
 }
 
 // ─────────── Excel export (.xlsx with template-style matrix) ───────────

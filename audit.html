@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cashlens · 做账审计板块</title>
+<meta name="description" content="Cashlens 做账审计板块 · 从统计流水板块接收主交付 TSV 数据(Transaction_Detail + Monthly_Summary)· 香港 SME" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        base:     'hsl(276 63% 3%)',
+        surface:  'hsl(276 63% 5%)',
+        elevated: 'hsl(214 10% 17%)',
+        input:    'hsl(0 0% 14.9%)',
+        subtle:   'hsl(0 0% 14.9%)',
+        line:     'hsl(214 10% 30%)',
+        sidebar:  'hsl(210 8% 11%)',
+        sidefg:   'hsl(212 6% 60%)',
+        fg1: 'hsl(0 0% 98%)',
+        fg2: 'hsl(0 0% 78%)',
+        fg3: 'hsl(0 0% 50%)',
+        gPurple: 'hsl(262 93% 69%)',
+        gPink:   'hsl(327 98% 71%)',
+        gOrange: 'hsl(21 100% 70%)',
+        ok: 'hsl(142 70% 65%)',
+        warn: 'hsl(38 95% 65%)',
+        err: 'hsl(0 80% 65%)',
+        accent:  'hsl(270 60% 70%)',
+        accent2: 'hsl(270 60% 85%)',
+      },
+      fontFamily: {
+        serif: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
+        sans:  ['Inter', '-apple-system', '"SF Pro Text"', '"PingFang SC"', 'system-ui', 'sans-serif'],
+        mono:  ['"IBM Plex Mono"', '"JetBrains Mono"', '"SF Mono"', 'Consolas', 'monospace'],
+      },
+    }
+  }
+}
+</script>
+<style>
+  html { background: #08020e; }
+  body {
+    background: #08020e;
+    background-image:
+      radial-gradient(ellipse 60% 40% at 50% -5%,  hsl(270 60% 25% / 0.4), transparent 70%),
+      radial-gradient(ellipse 50% 50% at 100% 90%, hsl(327 60% 25% / 0.18), transparent 70%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv02","cv03","cv04","cv11";
+  }
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  .gradient-text {
+    background: linear-gradient(90deg, hsl(262 93% 69%) 0%, hsl(327 98% 71%) 45%, hsl(21 100% 70%) 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent;
+  }
+  .accent-bg {
+    background: linear-gradient(135deg, hsl(262 93% 69%) 0%, hsl(327 98% 71%) 50%, hsl(21 100% 70%) 100%);
+    color: white;
+  }
+  .surface-card {
+    background: hsl(276 63% 5%);
+    border: 1px solid hsl(0 0% 14.9%);
+    border-radius: 10px;
+    box-shadow: inset 0 0 18px rgba(255,255,255,0.04);
+  }
+
+  .btn-prime {
+    background: hsl(270 60% 70%);
+    color: hsl(0 0% 98%);
+    border-radius: 8px;
+    font-weight: 500;
+    transition: transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
+    box-shadow: 0 4px 18px hsl(270 60% 50% / 0.35);
+  }
+  .btn-prime:hover { background: hsl(270 60% 60%); box-shadow: 0 6px 22px hsl(270 60% 50% / 0.45); }
+  .btn-prime:active { transform: scale(0.98); }
+  .btn-secondary {
+    background: hsl(0 0% 14.9%);
+    border: 1px solid hsl(0 0% 18%);
+    color: hsl(0 0% 98%);
+    border-radius: 8px;
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  .btn-secondary:hover { background: hsl(0 0% 18%); border-color: hsl(0 0% 25%); }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 6px;
+    font-size: 11.5px; font-weight: 500;
+    background: hsl(0 0% 14.9%);
+    border: 1px solid hsl(0 0% 18%);
+  }
+
+  .scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar::-webkit-scrollbar-thumb { background: hsl(0 0% 22% / 0.6); border-radius: 999px; }
+  .scrollbar::-webkit-scrollbar-thumb:hover { background: hsl(0 0% 30%); }
+
+  h1.display, h2.display, .font-display {
+    font-family: "Instrument Serif", ui-serif, Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+
+  /* TSV 预览表格 */
+  .tsv-table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .tsv-table th {
+    background: hsl(276 63% 8%);
+    color: hsl(0 0% 75%);
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 500;
+    border-bottom: 1px solid hsl(0 0% 14%);
+    font-size: 11.5px;
+    white-space: nowrap;
+    position: sticky; top: 0;
+  }
+  .tsv-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid hsl(0 0% 12%);
+    color: hsl(0 0% 86%);
+    white-space: nowrap;
+  }
+  .tsv-table tr:hover td { background: hsl(270 50% 20% / 0.15); }
+
+  @keyframes cardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  .card-in { animation: cardIn 360ms cubic-bezier(0.2,0,0,1) both; }
+</style>
+</head>
+<body class="text-fg1 font-sans min-h-screen">
+
+<!-- Header -->
+<header class="border-b border-subtle bg-base/95 backdrop-blur-sm sticky top-0 z-40">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-9 h-9 rounded-md accent-bg flex items-center justify-center text-base flex-shrink-0">📚</div>
+      <div class="min-w-0">
+        <div class="text-[15px] font-semibold gradient-text truncate">Cashlens · 做账审计板块</div>
+        <div class="text-[11px] text-fg3 truncate">从统计流水板块接收主交付 TSV 数据</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <a href="./" class="btn-secondary px-3 py-1.5 text-[12.5px] font-medium flex items-center gap-1.5">
+        <span>📊</span><span class="hidden sm:inline">统计流水板块</span><span class="sm:hidden">统计流水</span><span class="text-fg3">→</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- Main -->
+<main class="max-w-6xl mx-auto px-4 py-8 space-y-6">
+
+  <!-- Handoff card -->
+  <div id="handoffCard" class="card-in"></div>
+
+  <!-- Placeholder -->
+  <div id="placeholder"></div>
+
+</main>
+
+<!-- Footer -->
+<footer class="max-w-6xl mx-auto px-4 py-6 text-center text-[11px] text-fg3 border-t border-subtle mt-12">
+  Cashlens v8.0 · 做账审计板块 (placeholder) · 设置在 <a href="./" class="text-accent2 hover:underline">📊 统计流水板块</a> 管理(同源 localStorage 自动共享)
+</footer>
+
+<!-- Toast container -->
+<div id="toastContainer" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+<script>
+// ─────────── Handoff 数据接收 ───────────
+const HANDOFF_KEY = 'cashlens_handoff_v1';
+
+const SHEET_LABELS = [
+  '主表 · debit 存入交易明细',
+  '月度有效进账汇总',
+  '排除项目类别汇总',
+  '关联方汇入款单独列出',
+  '月度外币运动汇总'
+];
+const SHEET_NAMES = [
+  'Transaction_Detail',
+  'Monthly_Summary',
+  'Exclusion_Summary',
+  'Related_Party_Inflow',
+  'Miheng_Movement_Summary'
+];
+
+function loadHandoff() {
+  try {
+    const raw = localStorage.getItem(HANDOFF_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('handoff parse failed', e);
+    return null;
+  }
+}
+
+function fmtMoney(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function parseTsv(tsvText) {
+  if (!tsvText) return { headers: [], rows: [], metaRows: [] };
+  const lines = tsvText.split(/\r?\n/).filter(l => l.length);
+  if (!lines.length) return { headers: [], rows: [], metaRows: [] };
+  let i = 0;
+  const metaRows = [];
+  while (i < lines.length && lines[i].startsWith('META\t')) {
+    metaRows.push(lines[i].split('\t'));
+    i++;
+  }
+  if (i >= lines.length) return { headers: [], rows: [], metaRows };
+  const headers = lines[i].split('\t');
+  const rows = lines.slice(i + 1).map(l => l.split('\t'));
+  return { headers, rows, metaRows };
+}
+
+function renderTsvTable(tsvText, maxRows) {
+  const { headers, rows, metaRows } = parseTsv(tsvText);
+  if (!headers.length) return '<div class="text-[12px] text-fg3 p-3 surface-card">无数据</div>';
+  return `
+    <div class="surface-card overflow-hidden">
+      ${metaRows.length ? `<div class="px-3 py-2 border-b border-subtle bg-base/50 text-[11px] text-fg2 italic">
+        ${metaRows.map(r => `<div>${escapeHtml(r.slice(1).join(': '))}</div>`).join('')}
+      </div>` : ''}
+      <div class="overflow-x-auto scrollbar max-h-96">
+        <table class="tsv-table">
+          <thead>
+            <tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            ${rows.slice(0, maxRows).map(r => `<tr>${r.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${rows.length > maxRows ? `<div class="px-3 py-2 text-[11px] text-fg3 border-t border-subtle">仅显示前 ${maxRows} 行 · 共 ${rows.length} 行 · 点「📋 复制 TSV」拿全部</div>` : `<div class="px-3 py-2 text-[11px] text-fg3 border-t border-subtle">共 ${rows.length} 行</div>`}
+    </div>`;
+}
+
+function renderEmptyState() {
+  document.getElementById('handoffCard').innerHTML = `
+    <div class="surface-card p-10 text-center">
+      <div class="text-6xl mb-5 opacity-50">📭</div>
+      <h2 class="font-display text-[24px] mb-3">暂无数据</h2>
+      <p class="text-[13px] text-fg2 mb-6 leading-relaxed max-w-md mx-auto">
+        做账审计板块从「统计流水板块」接收主交付数据。<br>
+        请先到统计流水板块完成一份分析,然后点击 artifact 底部的「📤 发送到做账审计板块」按钮。
+      </p>
+      <a href="./" class="inline-flex items-center gap-2 btn-prime px-5 py-2.5 text-[13px] font-medium">
+        <span>📊</span><span>去统计流水板块</span><span>→</span>
+      </a>
+    </div>`;
+  document.getElementById('placeholder').innerHTML = '';
+}
+
+function renderReceivedState(data) {
+  const tsvBlocks = data.tsvBlocks || [];
+  const metrics = data.metrics || {};
+  const receivedAt = data.receivedAt ? new Date(data.receivedAt) : null;
+
+  // Hero 接收卡
+  const heroHtml = `
+    <div class="surface-card p-6">
+      <div class="flex items-start justify-between gap-4 mb-5 flex-wrap">
+        <div class="min-w-0">
+          <div class="chip mb-2"><span class="text-ok">📥</span><span>已从统计流水板块接收</span></div>
+          <h2 class="font-display text-[26px] mb-1 truncate">${escapeHtml(data.company || '未命名公司')}</h2>
+          <div class="text-[12.5px] text-fg2">
+            ${escapeHtml(data.period || '期间未指定')}
+            ${receivedAt ? ` · 接收于 ${escapeHtml(receivedAt.toLocaleString('zh-CN'))}` : ''}
+          </div>
+        </div>
+        <div class="flex gap-2 flex-shrink-0">
+          <button onclick="copyAllTsv()" class="btn-secondary px-3 py-1.5 text-[12px] flex items-center gap-1.5">
+            <span>📋</span><span>复制全部 TSV</span>
+          </button>
+          <button onclick="clearHandoff()" class="btn-secondary px-2.5 py-1.5 text-[12px] flex items-center gap-1.5">
+            <span>🗑️</span><span>清除</span>
+          </button>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div class="bg-base/50 rounded-md p-3 border border-subtle">
+          <div class="text-[10.5px] text-fg3 mb-1 tracking-wide uppercase">有效净进账</div>
+          <div class="font-display text-[22px] gradient-text">HKD ${fmtMoney(metrics.valid_inbound_hkd)}</div>
+        </div>
+        <div class="bg-base/50 rounded-md p-3 border border-subtle">
+          <div class="text-[10.5px] text-fg3 mb-1 tracking-wide uppercase">交易笔数</div>
+          <div class="font-display text-[22px]">${metrics.total_count ?? '—'}</div>
+          <div class="text-[10.5px] text-fg3 mt-0.5">${metrics.valid_count ?? '—'} 有效 · ${metrics.excluded_count ?? '—'} 排除</div>
+        </div>
+        <div class="bg-base/50 rounded-md p-3 border border-subtle">
+          <div class="text-[10.5px] text-fg3 mb-1 tracking-wide uppercase">主要币种</div>
+          <div class="text-[13px] mt-1">
+            ${(metrics.currency_breakdown || []).slice(0,3).map(c => `${escapeHtml(c.currency)} ${c.share_pct}%`).join(' · ') || '—'}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // TSV 预览(每张 sheet 单独卡)
+  const previewHtml = tsvBlocks.map((tsv, i) => `
+    <div>
+      <div class="flex items-center justify-between mb-2 px-1">
+        <h3 class="text-[13.5px] font-medium">
+          <span class="text-fg3 font-mono mr-1">Sheet ${i+1}</span>
+          <span>${escapeHtml(SHEET_NAMES[i] || `tsv_${i+1}`)}</span>
+          <span class="text-[11px] text-fg3 font-normal ml-1.5">· ${escapeHtml(SHEET_LABELS[i] || '')}</span>
+          ${i < 2 ? '<span class="chip ml-2 bg-accent/20 text-accent2 border-accent/40"><span>主交付</span></span>' : '<span class="chip ml-2 text-fg3"><span>辅助</span></span>'}
+        </h3>
+        <button onclick="copyTsv(${i})" class="text-[11px] text-fg3 hover:text-accent2 flex items-center gap-1">
+          <span>📋</span><span>复制</span>
+        </button>
+      </div>
+      ${renderTsvTable(tsv, i === 0 ? 15 : 30)}
+    </div>
+  `).join('');
+
+  document.getElementById('handoffCard').innerHTML = heroHtml;
+  document.getElementById('placeholder').innerHTML = `
+    <!-- 占位 -->
+    <div class="surface-card p-6 text-center mt-6">
+      <div class="text-3xl mb-2 opacity-60">🚧</div>
+      <h3 class="text-[14px] font-medium mb-1.5">做账审计功能开发中</h3>
+      <p class="text-[12px] text-fg2 leading-relaxed max-w-xl mx-auto">
+        当前板块仅做数据接收 + 5 张 TSV 预览。<br>
+        具体的做账审计逻辑(分录建议 / 总账映射 / 申报口径对接等)将在后续版本上线。
+      </p>
+    </div>
+
+    <!-- 5 张 TSV 预览 -->
+    <div class="space-y-6 mt-6">
+      <div class="text-[11px] text-fg3 tracking-wide uppercase px-1">接收到的 ${tsvBlocks.length} 张 TSV Sheet</div>
+      ${previewHtml || '<div class="surface-card p-6 text-center text-[12px] text-fg3">报告里未找到 TSV 数据块</div>'}
+    </div>
+  `;
+}
+
+function copyTsv(idx) {
+  const data = loadHandoff();
+  if (!data?.tsvBlocks?.[idx]) {
+    toast('未找到该 Sheet 的 TSV 内容', 'warn');
+    return;
+  }
+  navigator.clipboard.writeText(data.tsvBlocks[idx]).then(() => {
+    toast(`已复制 Sheet ${idx + 1} · ${SHEET_NAMES[idx] || ''}`);
+  });
+}
+
+function copyAllTsv() {
+  const data = loadHandoff();
+  if (!data?.tsvBlocks?.length) {
+    toast('无数据可复制', 'warn');
+    return;
+  }
+  const combined = data.tsvBlocks.map((t, i) =>
+    `# Sheet ${i+1} · ${SHEET_NAMES[i] || ''}\n${t.trim()}`
+  ).join('\n\n');
+  navigator.clipboard.writeText(combined).then(() => {
+    toast(`已复制全部 ${data.tsvBlocks.length} 张 TSV`);
+  });
+}
+
+function clearHandoff() {
+  if (!confirm('确定清除已接收的统计流水数据?\n\n清除后需要重新到统计流水板块发送。')) return;
+  localStorage.removeItem(HANDOFF_KEY);
+  init();
+  toast('已清除');
+}
+
+function toast(text, level = 'ok') {
+  const t = document.createElement('div');
+  const colorClass = level === 'warn'
+    ? 'border-warn/40 text-warn'
+    : level === 'err'
+    ? 'border-err/40 text-err'
+    : 'border-subtle text-fg1';
+  t.className = `pointer-events-auto bg-elevated border ${colorClass} rounded-lg px-4 py-2 text-[12.5px] shadow-xl card-in`;
+  t.textContent = text;
+  document.getElementById('toastContainer').appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 200ms'; }, 1800);
+  setTimeout(() => t.remove(), 2100);
+}
+
+function init() {
+  const data = loadHandoff();
+  if (!data) {
+    renderEmptyState();
+  } else {
+    renderReceivedState(data);
+  }
+}
+
+init();
+
+// 监听同源 localStorage 变化(另一标签页 push 时实时刷新)
+window.addEventListener('storage', (e) => {
+  if (e.key === HANDOFF_KEY) {
+    init();
+    if (e.newValue && !e.oldValue) {
+      toast('收到新的统计流水数据');
+    }
+  }
+});
+</script>
+
+</body>
+</html>
