@@ -368,7 +368,42 @@ function renderReceivedState(data) {
 function copyRawReport() {
   const data = loadHandoff();
   if (!data?.rawReport) return;
-  navigator.clipboard.writeText(data.rawReport).then(() => toast('已复制原始报告'));
+  safeCopyText(data.rawReport, '已复制原始报告');
+}
+
+// 3 级 fallback 复制:Clipboard API → execCommand → prompt 手动复制
+// 防御浏览器插件(沉浸式翻译等)拦截 / 文档失去 focus 等场景
+async function safeCopyText(text, successLabel = '已复制') {
+  if (text == null || text === '') { toast('内容为空', 'warn'); return; }
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(successLabel);
+      return;
+    } catch (e) {
+      console.warn('[copy] navigator.clipboard 失败,fallback execCommand', e);
+    }
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (ok) { toast(successLabel); return; }
+  } catch (e) {
+    console.warn('[copy] execCommand 失败', e);
+  }
+  const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
+  const shortcut = isMac ? 'Cmd+C' : 'Ctrl+C';
+  toast('自动复制被拦截 · 弹框手动复制', 'warn');
+  window.prompt(`自动复制失败(可能浏览器插件 / 权限拦截了 clipboard)。\n请 ${shortcut} 手动复制下方内容(已全选):`, text);
 }
 
 function copyTsv(idx) {
@@ -377,9 +412,7 @@ function copyTsv(idx) {
     toast('未找到该 Sheet 的 TSV 内容', 'warn');
     return;
   }
-  navigator.clipboard.writeText(data.tsvBlocks[idx]).then(() => {
-    toast(`已复制 Sheet ${idx + 1} · ${SHEET_NAMES[idx] || ''}`);
-  });
+  safeCopyText(data.tsvBlocks[idx], `已复制 Sheet ${idx + 1} · ${SHEET_NAMES[idx] || ''}`);
 }
 
 function copyAllTsv() {
@@ -391,9 +424,7 @@ function copyAllTsv() {
   const combined = data.tsvBlocks.map((t, i) =>
     `# Sheet ${i+1} · ${SHEET_NAMES[i] || ''}\n${t.trim()}`
   ).join('\n\n');
-  navigator.clipboard.writeText(combined).then(() => {
-    toast(`已复制全部 ${data.tsvBlocks.length} 张 TSV`);
-  });
+  safeCopyText(combined, `已复制全部 ${data.tsvBlocks.length} 张 TSV`);
 }
 
 function clearHandoff() {

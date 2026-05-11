@@ -3201,7 +3201,7 @@ function renderArtifactReport(text) {
 }
 
 function copyArtifact() {
-  navigator.clipboard.writeText(window.__latestReport || '').then(() => toast('已复制全文', 'ok'));
+  copyText(window.__latestReport || '', '已复制全文');
 }
 function downloadArtifactMd() {
   const t = window.__latestReport || '';
@@ -3221,7 +3221,7 @@ function copyArtifactTsv() {
   if (!matches.length) { toast('未找到 TSV 代码块', 'warn'); return; }
   const SHEETS = ['Transaction_Detail', 'Monthly_Summary', 'Exclusion_Summary', 'Related_Party_Inflow', 'Miheng_Movement_Summary'];
   const combined = matches.map((m, i) => `# Sheet ${i+1} · ${SHEETS[i] || ''}\n${m[1].trim()}`).join('\n\n');
-  navigator.clipboard.writeText(combined).then(() => toast(`已复制 ${matches.length} 个 TSV`, 'ok'));
+  copyText(combined, `已复制 ${matches.length} 个 TSV`);
 }
 function downloadTsv(idx, content) {
   const SHEETS = ['Transaction_Detail', 'Monthly_Summary', 'Exclusion_Summary', 'Related_Party_Inflow', 'Miheng_Movement_Summary'];
@@ -4533,8 +4533,42 @@ function resetCtxChip() {
 }
 
 // ─────────── Export ───────────
-function copyText(text) {
-  navigator.clipboard.writeText(text).then(() => toast('已复制', 'ok'));
+// 3 级 fallback 复制:Clipboard API → execCommand → prompt 手动复制
+// 防御浏览器插件(如沉浸式翻译)拦截 / 文档失去 focus / iOS Safari 旧版等场景
+async function copyText(text, successLabel = '已复制') {
+  if (text == null || text === '') { toast('内容为空', 'warn'); return; }
+  // L1: 现代 Clipboard API
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(successLabel, 'ok');
+      return;
+    } catch (e) {
+      console.warn('[copy] navigator.clipboard 失败,fallback execCommand', e);
+    }
+  }
+  // L2: 兼容 execCommand
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (ok) { toast(successLabel, 'ok'); return; }
+  } catch (e) {
+    console.warn('[copy] execCommand 失败', e);
+  }
+  // L3: 手动复制 prompt
+  const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
+  const shortcut = isMac ? 'Cmd+C' : 'Ctrl+C';
+  toast('自动复制被拦截 · 弹框手动复制', 'warn');
+  window.prompt(`自动复制失败(可能浏览器插件 / 权限拦截了 clipboard)。\n请 ${shortcut} 手动复制下方内容(已全选):`, text);
 }
 function downloadMd(text) {
   const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
@@ -4554,7 +4588,7 @@ function copyTsvBlocks() {
     return;
   }
   const combined = matches.map((m, i) => `# Sheet ${i+1}\n${m[1].trim()}`).join('\n\n');
-  navigator.clipboard.writeText(combined).then(() => toast(`已复制 ${matches.length} 个 TSV`, 'ok'));
+  copyText(combined, `已复制 ${matches.length} 个 TSV`);
 }
 function exportReport() {
   if (!window.__latestReport) { toast('暂无报告', 'warn'); return; }
