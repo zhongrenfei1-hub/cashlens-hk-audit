@@ -3242,14 +3242,32 @@ const HANDOFF_KEY = 'cashlens_handoff_v1';
 
 function sendToAuditModule() {
   const text = window.__latestReport;
-  if (!text) {
+  if (!text || text.length < 50) {
     toast('暂无报告 · 请先完成一次分析', 'warn');
     return;
   }
-  const tsvBlocks = [...text.matchAll(/```tsv\s*\n([\s\S]*?)```/g)].map(m => m[1].trim());
+  // 主匹配 ```tsv;若 0 → fallback 抓任意 ``` 块 + 含 \t 的当 TSV
+  let tsvBlocks = [...text.matchAll(/```tsv\s*\n([\s\S]*?)```/g)].map(m => m[1].trim());
   if (tsvBlocks.length === 0) {
-    toast('未找到 TSV 数据块 · 无法发送', 'warn');
-    return;
+    const allBlocks = [...text.matchAll(/```\w*\s*\n([\s\S]*?)```/g)].map(m => m[1].trim());
+    const tabBlocks = allBlocks.filter(b => b.includes('\t') && b.split('\n').length >= 2);
+    const codeFenceCount = (text.match(/```/g) || []).length;
+    console.warn('[handoff] ```tsv 主 regex 0 匹配');
+    console.warn('[handoff] 报告长度:', text.length, '字符');
+    console.warn('[handoff] ``` 总数:', codeFenceCount, '(成对则应为偶数)');
+    console.warn('[handoff] 找到代码块总数:', allBlocks.length, '· 其中含 tab 的:', tabBlocks.length);
+    if (allBlocks.length) {
+      console.warn('[handoff] 报告里出现的代码块 lang 标识:',
+        [...text.matchAll(/```(\w*)/g)].map(m => m[1] || '(none)'));
+    }
+    if (tabBlocks.length > 0) {
+      console.warn('[handoff] fallback:把 ' + tabBlocks.length + ' 个含 tab 的代码块当 TSV');
+      tsvBlocks = tabBlocks;
+    }
+  }
+  if (tsvBlocks.length === 0) {
+    const ok = confirm(`未识别到 TSV 数据块(AI 可能还在输出 / 输出格式异常)。\n\n报告长度:${text.length} 字符\n\n仍要发送原始报告到做账审计板块吗?(audit.html 会显示原文)`);
+    if (!ok) return;
   }
   let metrics = {};
   try {

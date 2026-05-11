@@ -330,6 +330,19 @@ function renderReceivedState(data) {
   `).join('');
 
   document.getElementById('handoffCard').innerHTML = heroHtml;
+
+  // 没识别到 TSV 块时,显示原始报告作为 fallback(`<pre>` 等宽字体)
+  const rawReportHtml = (!tsvBlocks.length && data.rawReport) ? `
+    <div class="surface-card p-4 mt-6">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-[13.5px] font-medium">⚠️ 未识别到 TSV 数据块 · 显示原始报告</h3>
+        <button onclick="copyRawReport()" class="text-[11px] text-fg3 hover:text-accent2">📋 复制原文</button>
+      </div>
+      <pre class="bg-base/50 border border-subtle rounded-md p-3 text-[11.5px] text-fg2 font-mono overflow-auto scrollbar max-h-[60vh] whitespace-pre-wrap break-words">${escapeHtml(data.rawReport)}</pre>
+      <div class="text-[11px] text-fg3 mt-2">可能原因:AI 还没输出完整 TSV / 输出格式异常 / 提示词被改。可回统计流水板块重新跑一次。</div>
+    </div>
+  ` : '';
+
   document.getElementById('placeholder').innerHTML = `
     <!-- 占位 -->
     <div class="surface-card p-6 text-center mt-6">
@@ -341,12 +354,21 @@ function renderReceivedState(data) {
       </p>
     </div>
 
+    ${rawReportHtml}
+
     <!-- 5 张 TSV 预览 -->
+    ${tsvBlocks.length ? `
     <div class="space-y-6 mt-6">
       <div class="text-[11px] text-fg3 tracking-wide uppercase px-1">接收到的 ${tsvBlocks.length} 张 TSV Sheet</div>
-      ${previewHtml || '<div class="surface-card p-6 text-center text-[12px] text-fg3">报告里未找到 TSV 数据块</div>'}
-    </div>
+      ${previewHtml}
+    </div>` : ''}
   `;
+}
+
+function copyRawReport() {
+  const data = loadHandoff();
+  if (!data?.rawReport) return;
+  navigator.clipboard.writeText(data.rawReport).then(() => toast('已复制原始报告'));
 }
 
 function copyTsv(idx) {
