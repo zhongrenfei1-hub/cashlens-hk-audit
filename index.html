@@ -968,12 +968,11 @@ tailwind.config = {
       </button>
     </div>
 
-    <div class="px-3 pb-2">
-      <div class="text-[11px] font-medium text-fg3 px-2 mb-1.5 tracking-wide uppercase">历史项目</div>
+    <!-- 历史项目可滚动区:flex-1 占满中段,内容多了自动 Y 滚动;min-h-0 是 flex 子项允许收缩的必要条件,否则 overflow 不生效 -->
+    <div class="flex-1 overflow-y-auto scrollbar px-3 pb-2 min-h-0">
+      <div class="text-[11px] font-medium text-fg3 px-2 mb-1.5 tracking-wide uppercase sticky top-0 bg-base py-1 z-10">历史项目</div>
       <div id="projectList" class="space-y-0.5"></div>
     </div>
-
-    <div class="flex-1"></div>
 
     <div class="p-3 border-t border-subtle space-y-1">
       <a href="https://docs.anthropic.com/en/api/getting-started" target="_blank" class="flex items-center justify-between px-2.5 py-1.5 rounded-md hover:bg-surface text-fg3 hover:text-fg1 text-[12px] transition">
