@@ -1892,10 +1892,13 @@ const PROVIDERS = {
   },
   gemini: {
     label: 'Google Gemini',
-    // Google 2024 推出的 OpenAI 兼容端点,直接走现有 openai format 协议,
-    // 不需要专门的 Google SDK / 不需要改 callAI / streamAI 等核心逻辑
-    format: 'openai',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    // 走 Gemini 原生 API(不是 OpenAI 兼容端点)— 关键 win:
+    //   1. PDF 直接 inline_data base64 喂(浏览器省 PDF.js 转 PNG 那一步)
+    //   2. 上传体积小(原 PDF << PNG × 页数)
+    //   3. 服务端 PDF parser 精度跟当前 vision OCR 一致(usageMetadata 显示后端也是转 image)
+    // 协议跟 OpenAI / Anthropic 完全不同:contents/parts/inline_data + X-goog-api-key + :streamGenerateContent
+    format: 'gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     keyPrefix: 'AIza',
     keyHint: 'AIza...',
     keyLink: 'https://aistudio.google.com/apikey',
@@ -1908,8 +1911,8 @@ const PROVIDERS = {
       { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro (上一代稳定)',  in: 0.625, out: 2.5  },
       { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash (上一代便宜)', in: 0.075, out: 0.3 },
     ],
-    hint: '🌐 Google AI Studio · 实测 CORS 已配置允许 GitHub Pages 直连(2026-05-13 确认) · 大陆需 VPN · 原生多模态(PDF 转图喂)',
-    pdfMode: 'image',
+    hint: '🌐 Google AI Studio · 走原生 API · PDF 直接 inline base64(浏览器免转图,服务端处理) · 大陆需 VPN',
+    pdfMode: 'native',
   },
   custom: {
     label: '自定义 OpenAI 兼容',
@@ -2301,6 +2304,20 @@ async function testApiKey() {
           'content-type': 'application/json',
         },
         body: JSON.stringify({ model, max_tokens: 8, messages: [{ role: 'user', content: 'ping' }] }),
+      });
+    } else if (providerCfg.format === 'gemini') {
+      // Gemini 原生 API:POST {baseUrl}/models/{model}:generateContent
+      // Auth: X-goog-api-key · Body: contents/parts schema
+      r = await fetch(`${baseUrl}/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: {
+          'X-goog-api-key': key,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'ping' }] }],
+          generationConfig: { maxOutputTokens: 8 },
+        }),
       });
     } else {
       r = await fetch(`${baseUrl}/chat/completions`, {
@@ -4444,6 +4461,30 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
         },
         body: JSON.stringify(body),
       });
+    } else if (provider.format === 'gemini') {
+      // ─── Gemini native API ───
+      // URL: {baseUrl}/models/{model}:streamGenerateContent?alt=sse
+      // Auth: X-goog-api-key(不是 Bearer)
+      // Body: contents/parts/inline_data schema(不是 messages/content)
+      // System prompt: top-level systemInstruction(不进 messages)
+      const body = {
+        contents: messages.map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: Array.isArray(m.content)
+            ? m.content  // buildUserContent 已经返回 Gemini parts 格式
+            : [{ text: String(m.content || '') }],
+        })),
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig: { maxOutputTokens: maxTokens },
+      };
+      response = await fetch(`${provider.baseUrl}/models/${model}:streamGenerateContent?alt=sse`, {
+        method: 'POST',
+        headers: {
+          'X-goog-api-key': apiKey,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
     } else {
       // ─── OpenAI-compatible chat completions ───
       const body = {
@@ -4526,6 +4567,24 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
           if (evType === 'message_delta' && obj.usage) {
             usage = { ...usage, ...obj.usage };
           }
+        } else if (provider.format === 'gemini') {
+          // Gemini SSE chunk:每条 data 是完整 JSON,包含 candidates[].content.parts[].text
+          // 流式时同一 message 的多个 chunk 累积,每个 chunk 都带新 text 增量
+          const parts = obj.candidates?.[0]?.content?.parts;
+          if (parts) {
+            for (const p of parts) {
+              if (p.text) onText(p.text);
+            }
+          }
+          // Gemini usage 在 final chunk 或 metadata 字段:promptTokenCount / candidatesTokenCount
+          if (obj.usageMetadata) {
+            usage = {
+              input_tokens: obj.usageMetadata.promptTokenCount || 0,
+              output_tokens: obj.usageMetadata.candidatesTokenCount || 0,
+              cache_creation_input_tokens: 0,
+              cache_read_input_tokens: obj.usageMetadata.cachedContentTokenCount || 0,
+            };
+          }
         } else {
           // OpenAI-compatible streaming chunk
           const delta = obj.choices?.[0]?.delta;
@@ -4583,6 +4642,22 @@ async function buildUserContent(userText, files, provider) {
       content.push(block);
     }
     return content;
+  }
+
+  // ───── Gemini native PDF mode ─────
+  // PDF + 图片都直接 inline_data base64 传服务端 · 浏览器免 PDF.js 转图
+  // Gemini parts schema:[{text:'...'}, {inline_data:{mime_type:'application/pdf',data:'base64'}}]
+  if (provider.format === 'gemini' && provider.pdfMode === 'native') {
+    const parts = [{ text: enrichedUserText }];
+    for (const f of binFiles) {
+      parts.push({
+        inline_data: {
+          mime_type: f.type,  // 'application/pdf' / 'image/png' / 'image/jpeg' 等
+          data: f.base64,
+        },
+      });
+    }
+    return parts;
   }
 
   // ───── Image mode (vision-capable but no native PDF) ─────
