@@ -1901,12 +1901,14 @@ const PROVIDERS = {
     keyLink: 'https://aistudio.google.com/apikey',
     endpointLabel: 'generativelanguage.googleapis.com',
     models: [
+      { id: 'gemini-pro-latest',     label: 'Gemini Pro Latest (最新旗舰别名)', in: 1.25,  out: 5    },
+      { id: 'gemini-flash-latest',   label: 'Gemini Flash Latest (最新便宜别名)', in: 0.075, out: 0.3 },
       { id: 'gemini-3-pro-latest',   label: 'Gemini 3 Pro (旗舰多模态)',    in: 1.25,  out: 5    },
       { id: 'gemini-3-flash-latest', label: 'Gemini 3 Flash (便宜快)',      in: 0.075, out: 0.3  },
       { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro (上一代稳定)',  in: 0.625, out: 2.5  },
       { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash (上一代便宜)', in: 0.075, out: 0.3 },
     ],
-    hint: '🌐 Google AI Studio · ⚠️ Google 也可能 CORS 拦截浏览器直连 · 若 Failed to fetch 改走 OpenRouter / 自定义中转 · 大陆需 VPN',
+    hint: '🌐 Google AI Studio · 实测 CORS 已配置允许 GitHub Pages 直连(2026-05-13 确认) · 大陆需 VPN · 原生多模态(PDF 转图喂)',
     pdfMode: 'image',
   },
   custom: {
