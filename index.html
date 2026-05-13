@@ -1276,7 +1276,7 @@ tailwind.config = {
           <button onclick="toggleKeyVisibility()" id="toggleKeyBtn" class="px-2.5 py-2 rounded-lg bg-elevated border border-subtle hover:border-line text-[11.5px] text-fg2">显示</button>
         </div>
         <div class="mt-2 text-[11px] text-fg3 leading-relaxed">
-          密钥只存浏览器 localStorage,直接发 <span id="endpointLabel" class="font-mono">api.deepseek.com</span>,无中转。
+          密钥只存本机 localStorage,浏览器直连 <span id="endpointLabel" class="font-mono">api.deepseek.com</span>(无中转)。若「Failed to fetch」→ 看上方 hint 或换中转 provider。
         </div>
         <div id="keyTestResult" class="mt-2 text-[11.5px] hidden"></div>
       </div>
@@ -1901,7 +1901,7 @@ const PROVIDERS = {
       { id: 'o3-mini',      label: 'o3 Mini (推理)',           in: 3,    out: 12  },
       { id: 'o1-mini',      label: 'o1 Mini (旧版推理)',       in: 3,    out: 12  },
     ],
-    hint: '🌐 海外 · 中国大陆需 VPN',
+    hint: '🌐 海外 · ⚠️ OpenAI 不允许浏览器直连(CORS 拦截 · 跟 VPN 无关) · 必须走 OpenRouter / aipaibox / 自定义中转',
     pdfMode: 'image',
   },
   gemini: {
@@ -1920,7 +1920,7 @@ const PROVIDERS = {
       { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro (上一代稳定)',  in: 0.625, out: 2.5  },
       { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash (上一代便宜)', in: 0.075, out: 0.3 },
     ],
-    hint: '🌐 Google AI Studio · 中国大陆需 VPN · 原生多模态(PDF 转图喂)',
+    hint: '🌐 Google AI Studio · ⚠️ Google 也可能 CORS 拦截浏览器直连 · 若 Failed to fetch 改走 OpenRouter / 自定义中转 · 大陆需 VPN',
     pdfMode: 'image',
   },
   custom: {
