@@ -1289,22 +1289,6 @@ tailwind.config = {
         <div class="mt-1.5 text-[11px] text-fg3" id="modelHint"></div>
       </div>
 
-      <div>
-        <label class="flex items-center justify-between text-[12px] font-medium text-fg2 mb-1.5">
-          <span>Extended Thinking 思考预算</span>
-          <span id="thinkingValue" class="tabular text-fg3">0</span>
-        </label>
-        <input id="thinkingSlider" type="range" min="0" max="32000" step="1000" value="0"
-               class="w-full accent-accent" />
-        <div class="text-[11px] text-fg3 mt-1">0 = 关闭。建议 8K~16K(更深入,但更慢更贵)。</div>
-      </div>
-
-      <div>
-        <label class="block text-[12px] font-medium text-fg2 mb-1.5">最大输出 Tokens</label>
-        <input id="maxTokens" type="number" value="16384" step="1024" min="1024" max="64000"
-               class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] tabular focus-glow" />
-      </div>
-
       <details class="border border-subtle rounded-lg p-3">
         <summary class="text-[12px] font-medium text-fg2 flex items-center justify-between">
           <span>高级:系统提示词 v4.0</span>
@@ -2087,9 +2071,7 @@ function openSettings() {
   } else {
     document.getElementById('customModel').classList.add('hidden');
   }
-  document.getElementById('thinkingSlider').value = s.thinking || 0;
-  document.getElementById('thinkingValue').textContent = formatThinking(s.thinking || 0);
-  document.getElementById('maxTokens').value = s.maxTokens || 16384;
+  // thinking / maxTokens UI 已移除,值用默认或 localStorage 旧值(saveSettings 沿用)
   document.getElementById('systemPromptInput').value = s.systemPrompt || SYSTEM_PROMPT_V4;
   document.getElementById('settingsModal').classList.remove('hidden');
 }
@@ -2107,9 +2089,7 @@ function resetPrompt() {
 }
 function formatThinking(n) { return n === 0 ? '关闭' : `${n.toLocaleString()} tokens`; }
 
-document.getElementById('thinkingSlider')?.addEventListener('input', (e) => {
-  document.getElementById('thinkingValue').textContent = formatThinking(parseInt(e.target.value));
-});
+// thinkingSlider event listener 已删(UI 移除);保留 formatThinking helper 防其他地方调用
 document.getElementById('modelSelect')?.addEventListener('change', (e) => {
   document.getElementById('customModel').classList.toggle('hidden', e.target.value !== 'custom');
 });
@@ -2134,6 +2114,8 @@ function saveSettings() {
   const provider = document.getElementById('providerSelect').value;
   const sel = document.getElementById('modelSelect').value;
   const rawBaseUrl = document.getElementById('customBaseUrl').value.trim();
+  // thinking / maxTokens UI 已删,沿用 localStorage 旧值或默认(callAI 仍走 loadSettings 拿)
+  const prev = loadSettings();
   const settings = {
     provider,
     // Auto-fix: append /v1 if user forgets, for both 'custom' and 'oneapi' types
@@ -2141,8 +2123,8 @@ function saveSettings() {
     apiKey: document.getElementById('apiKeyInput').value.trim().replace(/^["']|["']$/g, ''), // strip stray quotes
     model: sel === 'custom' ? null : sel,
     customModel: sel === 'custom' ? document.getElementById('customModel').value.trim() : null,
-    thinking: parseInt(document.getElementById('thinkingSlider').value),
-    maxTokens: parseInt(document.getElementById('maxTokens').value),
+    thinking: prev.thinking ?? 0,
+    maxTokens: prev.maxTokens ?? 16384,
     systemPrompt: document.getElementById('systemPromptInput').value,
   };
   saveSettingsRaw(settings);
