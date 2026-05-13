@@ -153,15 +153,51 @@ python3 -m http.server 8000
 | 分析报告 | localStorage(本机最近 30 条)| 不上传 |
 | 提示词 | localStorage | 仅 → api.anthropic.com |
 
-**完全无服务器中转**,关闭网页 = 内存数据消失。共用电脑请记得清除 localStorage。
+**默认无中转**(浏览器直连 AI provider),关闭网页 = 内存数据消失。共用电脑请记得清除 localStorage。
+
+> ⚠️ **例外**:OpenAI / Google Gemini / 私有 HTTP server **必须**通过反代(浏览器 CORS / Mixed Content 限制)。
+> 详见下方 [🔌 部署反代 Worker](#-部署反代-worker可选--解决-cors--mixed-content)。
+
+## 🔌 部署反代 Worker(可选 · 解决 CORS / Mixed Content)
+
+某些后端浏览器调不通:
+
+| 后端 | 浏览器拦截原因 | 必须反代 |
+|---|---|---|
+| OpenAI `api.openai.com` | CORS(OpenAI 不允许浏览器直连) | ✅ |
+| Google Gemini | CORS(同上) | ✅ |
+| 私有 server `http://x.x.x.x:8080` | Mixed Content(HTTPS 页面禁调 HTTP) | ✅ |
+| 中转站(部分) | 服务商没设 CORS header | 可能需要 |
+| DeepSeek / 通义千问 / 豆包 / Kimi / 智谱 | 服务商设了 CORS | 不需要 |
+| Anthropic Claude | `anthropic-dangerous-direct-browser-access` 例外 | 不需要 |
+| OpenRouter / aipaibox | 这些**本身**就是反代,自带 CORS | 不需要 |
+
+### 一键部署(5 分钟)
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/zhongrenfei1-hub/cashlens-hk-audit/tree/main/cloudflare-worker)
+
+或者按 [`cloudflare-worker/README.md`](./cloudflare-worker/README.md) 图文指南手动部署(纯网页操作,不装 CLI)。
+
+### 部署后用法
+
+Cashlens 设置:
+- **服务商**:自定义 OpenAI 兼容
+- **Base URL**:`https://your-worker-name.<your-subdomain>.workers.dev`(你的 worker URL)
+- **API Key**:你的真实 key(worker 透传不存)
+- **模型**:自定义 → 填后端支持的 model ID
+
+完事,以后客户用永远 work。
 
 ## 🐞 常见问题
 
 ### Q: 测试连接失败,提示 "Invalid API Key"
 检查 Key 是否完整(应以 `sk-ant-api03-` 开头)。在 https://console.anthropic.com/settings/keys 重新生成。
 
-### Q: CORS 错误
-本工具用 `anthropic-dangerous-direct-browser-access: true` 头允许浏览器直连。如果你部署的网址被 Anthropic 限制,可联系 support。
+### Q: CORS 错误 / Failed to fetch / Mixed Content
+浏览器禁止 HTTPS 页面调 HTTP API(Mixed Content)和无 CORS 后端(CORS)。
+- **Anthropic Claude**:`anthropic-dangerous-direct-browser-access: true` 例外,直连 OK
+- **DeepSeek / 通义千问 / 豆包 / Kimi / 智谱 / OpenRouter / aipaibox**:服务商设了 CORS,直连 OK
+- **OpenAI / Gemini / 私有 server**:必须部署反代 worker,见上方 [🔌 部署反代 Worker](#-部署反代-worker可选--解决-cors--mixed-content)
 
 ### Q: PDF 太大上传失败
 单文件限 32 MB,总请求建议 < 100 MB。超大 PDF 请先用 PDF 工具拆分。

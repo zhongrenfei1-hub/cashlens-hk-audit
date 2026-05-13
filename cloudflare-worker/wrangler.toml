@@ -1,22 +1,31 @@
-# Cashlens · DeepSeek 反代 Worker 配置
-# 这个文件是给熟悉 wrangler CLI 的人用的;
-# 普通用户建议直接走 Cloudflare 网页 Dashboard 部署(见 README.md),不需要装 wrangler。
+# Cashlens · 通用 OpenAI 兼容反代 Worker 配置
+#
+# 这个文件给熟悉 wrangler CLI 的人;
+# 普通用户走 Cloudflare 网页 Dashboard 部署(见 README.md),不需要装 wrangler。
 
-name = "cashlens-deepseek-proxy"
+name = "cashlens-proxy"
 main = "worker.js"
-compatibility_date = "2025-04-01"
+compatibility_date = "2026-05-01"
 
-# 部署后的 URL 形如 https://cashlens-deepseek-proxy.<your-subdomain>.workers.dev
-# workers_dev 默认开启,首次 deploy 会自动给一个免费 *.workers.dev 二级域
+# 部署后的 URL 形如 https://cashlens-proxy.<your-subdomain>.workers.dev
+# workers_dev 默认开启,首次 deploy 自动给免费 *.workers.dev 二级域
 
 # ─────────────────────────────────────────────
 # 环境变量
 # ─────────────────────────────────────────────
-# DEEPSEEK_API_KEY 必须配置成 secret(不在文件里),用以下任一方式:
-#   1. wrangler secret put DEEPSEEK_API_KEY     ← CLI
-#   2. Cloudflare Dashboard → Worker → Settings → Variables → Add variable → Type=Secret
+# 必填 · UPSTREAM:目标后端 base URL(例 http://69.5.20.196:8080 或 https://api.openai.com/v1)
+# 用以下任一方式设置(注意 UPSTREAM 不是 secret,可以是普通 var):
+#   wrangler secret put UPSTREAM        ← CLI(作为 secret,看不到值)
+#   或在 Dashboard → Worker → Settings → Variables → Add variable,Type=Plaintext
 #
-# 可选:扩展 Origin 白名单(默认已含 zhongrenfei1-hub.github.io 和 localhost)
+# 选填 · UPSTREAM_KEY:设置后启用「模式 B · 隐藏 key」,worker 自动注入 Bearer
+#   wrangler secret put UPSTREAM_KEY    ← 必须用 secret(不是 plaintext)
+#   前端 Cashlens 不再需要填 key,所有人共用一个 worker
+#
+# 选填 · ALLOWED_ORIGINS:Origin 白名单(逗号分隔);不设则允许任意 Origin
+# 选填 · DEBUG:'1' 时返回详细错误信息便于排查
+
+# 示例(取消注释并填值):
 # [vars]
-# ALLOWED_ORIGINS = "https://example.com,https://another-domain.com"
-# DEBUG = "0"
+# UPSTREAM = "http://69.5.20.196:8080"
+# ALLOWED_ORIGINS = "https://zhongrenfei1-hub.github.io,http://localhost:8101"

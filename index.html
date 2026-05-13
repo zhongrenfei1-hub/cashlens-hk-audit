@@ -1262,8 +1262,10 @@ tailwind.config = {
       <div id="customEndpointWrap" class="hidden">
         <label class="block text-[12px] font-medium text-fg2 mb-1.5">自定义 Base URL</label>
         <input id="customBaseUrl" type="text" placeholder="https://your-endpoint/v1"
+               onblur="preflightBaseUrl()"
                class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] font-mono focus-glow" />
-        <div class="mt-1 text-[11px] text-fg3">必须是 OpenAI 兼容 API(支持 /chat/completions)</div>
+        <div class="mt-1 text-[11px] text-fg3">必须是 OpenAI 兼容 API(支持 /chat/completions)· 输入后自动检测浏览器兼容性</div>
+        <div id="baseUrlPreflight" class="mt-2 hidden"></div>
       </div>
 
       <div>
@@ -2108,6 +2110,96 @@ function normalizeBaseUrl(url) {
     url += '/v1';
   }
   return url;
+}
+
+// ─────────── Settings 智能检测:baseUrl 浏览器可达性 ───────────
+// 用户在 customBaseUrl 输入完(blur)后自动跑 preflight,检测两个常见拦截:
+//   1. Mixed Content(HTTPS 页面调 HTTP 后端 → 浏览器自动拦)
+//   2. CORS(后端没设 Access-Control-Allow-Origin → 浏览器拦跨域)
+// 失败时弹引导卡 + 一键 Deploy 反代 Worker 按钮(把任何后端包装成 HTTPS + CORS)
+async function preflightBaseUrl() {
+  const url = (document.getElementById('customBaseUrl')?.value || '').trim();
+  const el = document.getElementById('baseUrlPreflight');
+  if (!el) return;
+  if (!url) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.classList.remove('hidden');
+  el.innerHTML = '<div class="text-[11px] text-fg3">🔍 检测浏览器兼容性…</div>';
+
+  const issues = [];
+
+  // Check 1 · Mixed Content(localhost 例外:W3C 规范允许 HTTPS 页面调 http://localhost)
+  if (location.protocol === 'https:' && /^http:\/\//i.test(url)) {
+    if (!/^http:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(url)) {
+      issues.push({
+        title: 'Mixed Content',
+        msg: 'HTTPS 页面禁止调 HTTP 后端 · 浏览器自动拦截(请求根本不会发出)',
+      });
+    }
+  }
+
+  // Check 2 · OPTIONS preflight CORS(8 秒超时)
+  try {
+    const probeUrl = url.replace(/\/+$/, '') + '/models';
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(probeUrl, {
+      method: 'OPTIONS',
+      headers: {
+        'Origin': location.origin,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization,content-type',
+      },
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    const acao = res.headers.get('Access-Control-Allow-Origin');
+    if (!acao || (acao !== '*' && acao !== location.origin)) {
+      issues.push({
+        title: 'CORS',
+        msg: `服务端没设 Access-Control-Allow-Origin(响应 header: ${acao || 'missing'}) · 浏览器拦截跨域请求`,
+      });
+    }
+  } catch (e) {
+    // 已经报了 Mixed Content 就不重复(fetch 必然失败);否则报网络/CORS 异常
+    if (!issues.length) {
+      const reason = e.name === 'AbortError' ? '8 秒超时' : (e.message || 'fetch 失败');
+      issues.push({
+        title: '网络',
+        msg: `${reason} · 可能 server 不通 / 防火墙 / DNS / 或 CORS 在 preflight 阶段直接拦截`,
+      });
+    }
+  }
+
+  if (issues.length === 0) {
+    el.innerHTML = '<div class="text-[11.5px] text-ok flex items-center gap-1.5"><span>✅</span><span>检测通过 · 浏览器能直接连这个 baseUrl</span></div>';
+    return;
+  }
+
+  // 有问题 → 引导卡 + Deploy 反代按钮
+  el.innerHTML = `
+    <div class="rounded-lg border border-warn/40 bg-warn/10 p-3">
+      <div class="text-[12px] font-medium text-warn mb-1.5">⚠️ 检测到浏览器调不通</div>
+      <div class="space-y-1 text-[11.5px] text-fg2">
+        ${issues.map(i => '<div>· <strong class="text-fg1">' + escapeHtml(i.title) + '</strong>: ' + escapeHtml(i.msg) + '</div>').join('')}
+      </div>
+      <div class="mt-2.5 pt-2.5 border-t border-warn/20 text-[11px] text-fg3 leading-relaxed">
+        💡 部署一个免费 Cloudflare Worker 反代(5 分钟一次性),把 HTTP / 无 CORS 后端包装成 HTTPS + CORS 入口。<br>
+        部署后这里 baseUrl 改填 worker URL,原后端 URL 配在 worker 内的 <code class="text-accent2">UPSTREAM</code> 环境变量。
+      </div>
+      <div class="mt-2.5 flex gap-2 flex-wrap">
+        <a target="_blank" rel="noopener"
+           href="https://deploy.workers.cloudflare.com/?url=https://github.com/zhongrenfei1-hub/cashlens-hk-audit/tree/main/cloudflare-worker"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11.5px] font-medium btn-prime">
+          <span>🚀</span><span>一键 Deploy 反代</span>
+        </a>
+        <a target="_blank" rel="noopener"
+           href="https://github.com/zhongrenfei1-hub/cashlens-hk-audit/blob/main/cloudflare-worker/README.md"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11.5px] btn-secondary">
+          <span>📖</span><span>详细教程</span>
+        </a>
+      </div>
+    </div>
+  `;
 }
 
 function saveSettings() {
