@@ -1940,6 +1940,43 @@ function saveSettingsRaw(s) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 }
 
+// ─────────── URL auto-config(一键配置链接)───────────
+// 支持 query 参数:?provider=X&model=Y&key=Z&baseUrl=W
+// 用法:发链接给客户,点开自动写入 localStorage,他不用进 Settings 点。
+// 自动配完清除 URL query 防 key 泄漏到浏览器 history / 截图。
+function applyUrlAutoConfig() {
+  const params = new URLSearchParams(location.search);
+  const p = params.get('provider');
+  const m = params.get('model');
+  const k = params.get('key') || params.get('apiKey');
+  const b = params.get('baseUrl');
+  if (!p && !m && !k && !b) return;
+
+  const s = loadSettings();
+  const summary = [];
+  if (p) { s.provider = p; summary.push(`provider=${p}`); }
+  if (m) {
+    s.customModel = m;
+    s.model = null;
+    summary.push(`model=${m}`);
+  }
+  if (k) { s.apiKey = k; summary.push('apiKey=***'); }
+  if (b) { s.customBaseUrl = b; summary.push(`baseUrl=${b}`); }
+  saveSettingsRaw(s);
+
+  // 清 URL · 防 key 进 history / referer / 截图
+  try { history.replaceState({}, '', location.pathname + location.hash); } catch {}
+
+  // 提示用户(DOMContentLoaded 后 toast 才能渲染,所以延 200ms)
+  setTimeout(() => {
+    if (typeof toast === 'function') {
+      toast(`✅ 已自动配置 · ${summary.join(' · ')}`, 'ok');
+    }
+    if (typeof updateApiKeyDot === 'function') updateApiKeyDot();
+    if (typeof updateModelLabel === 'function') updateModelLabel();
+  }, 200);
+}
+
 function loadEntityCache() {
   try { return JSON.parse(localStorage.getItem(ENTITY_CACHE_KEY)) || {}; }
   catch { return {}; }
@@ -5455,6 +5492,9 @@ function applyEntityCachePrefill(name) {
 
 // ─────────── Init ───────────
 window.addEventListener('DOMContentLoaded', () => {
+  // URL auto-config(在其他 init 之前 · 写入 settings 让后续 updateApiKeyDot 等读到新值)
+  applyUrlAutoConfig();
+
   updateApiKeyDot();
   updateModelLabel();
   resetCtxChip();
