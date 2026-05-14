@@ -1225,7 +1225,7 @@ tailwind.config = {
     </div>
 
     <div class="p-2 border-t border-subtle text-[10px] text-fg3 text-center">
-      v4.3 · 香港 SME 统计流水工具 · 只算 debit 存入
+      v9.0 · Gemini 专属 · 香港 SME 统计流水(仅 debit 存入)
     </div>
   </aside>
 
@@ -1235,28 +1235,21 @@ tailwind.config = {
 <div id="settingsModal" class="modal-backdrop hidden">
   <div class="bg-surface rounded-2xl border border-subtle shadow-2xl w-[540px] max-h-[90vh] overflow-y-auto scrollbar">
     <div class="px-5 py-4 border-b border-subtle flex items-center justify-between">
-      <div class="text-[15px] font-semibold">设置</div>
+      <div class="flex items-center gap-2">
+        <span class="text-[15px] font-semibold">设置</span>
+        <span class="text-[10.5px] px-2 py-0.5 rounded-md gradient-bg text-white font-medium">Gemini 专属</span>
+      </div>
       <button onclick="closeSettings()" class="w-7 h-7 rounded hover:bg-elevated text-fg3 text-lg">✕</button>
     </div>
     <div class="p-5 space-y-5">
 
-      <!-- ═════ 新手引导面板(默认展开) ═════ -->
+      <!-- ═════ AI 服务商(v9.0 锁定 Gemini · 后端代码仍 generic 留作未来扩展)═════ -->
       <div>
-        <label class="block text-[12px] font-medium text-fg2 mb-1.5">服务商</label>
-        <select id="providerSelect" class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] focus-glow">
-          <option value="deepseek">DeepSeek 深度求索(便宜,国内可用,推荐)</option>
-          <option value="qwen">阿里 通义千问 (DashScope · 国内)</option>
-          <option value="doubao">字节跳动 豆包 (火山方舟 · 国内)</option>
-          <option value="moonshot">月之暗面 Kimi (Moonshot · 国内)</option>
-          <option value="zhipu">智谱 GLM (BigModel · 国内)</option>
-          <option value="aipaibox">aipaibox 中转站(国内多模型聚合)</option>
-          <option value="oneapi">其他 oneapi/new-api 中转站</option>
-          <option value="openrouter">OpenRouter(代理多家模型)</option>
-          <option value="anthropic">Anthropic Claude(海外)</option>
-          <option value="openai">OpenAI(海外)</option>
-          <option value="gemini">Google Gemini(海外 · 多模态)</option>
-          <option value="custom">自定义 OpenAI 兼容…</option>
+        <label class="block text-[12px] font-medium text-fg2 mb-1.5">AI 服务商 <span class="text-fg3 font-normal">· 已锁定 Google Gemini</span></label>
+        <select id="providerSelect" disabled class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] focus-glow opacity-70 cursor-not-allowed">
+          <option value="gemini" selected>Google Gemini(原生 API · PDF 直传)</option>
         </select>
+        <div class="mt-1 text-[11px] text-fg3">本工具 v9.0 起专为 Gemini 优化 · 大陆访问需 VPN · 去 <a href="https://aistudio.google.com/apikey" target="_blank" class="text-accent2 hover:underline">aistudio.google.com/apikey</a> 拿 key</div>
       </div>
 
       <div id="customEndpointWrap" class="hidden">
@@ -2003,12 +1996,12 @@ function loadEntityCacheFor(name) {
 // ─────────── Embedded defaults (zero-config for end users) ───────────
 // 客户打开即用,无需配置。高级用户仍可在设置里覆盖。
 const DEFAULTS = {
-  provider: 'deepseek',
+  provider: 'gemini',
   // 注:不再内置 API Key — 客户必须自己在设置面板里填自己的 DeepSeek key。
   // 之前内置 key 会暴露在前端源码 + GitHub 上,所以改架构由客户自带。
   // streamAI() 入口会检查 key 是否为空,空时自动 toast + openSettings()。
   apiKey:   '',
-  model:    'deepseek-chat',
+  model:    'gemini-flash-latest',
 };
 
 function getProvider() {
