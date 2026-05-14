@@ -2812,7 +2812,12 @@ const dz = document.getElementById('dropzone');
 dz.addEventListener('drop', async (e) => {
   await handleDataTransfer(e.dataTransfer);
 });
-dz.addEventListener('click', () => document.getElementById('fileInput').click());
+dz.addEventListener('click', (e) => {
+  // 点 dz 内的 label / button / input 时不要重复触发 — 它们自己有原生 click(否则
+  // 点「选择文件夹」会冒泡到这里再开一次「选文件」对话框,导致两个 dialog 撞车
+  if (e.target.closest('label, button, input')) return;
+  document.getElementById('fileInput').click();
+});
 
 // Whole window drag-drop (so user doesn't have to hit dropzone exactly)
 ['dragover'].forEach(evt => window.addEventListener(evt, (e) => { e.preventDefault(); }));
