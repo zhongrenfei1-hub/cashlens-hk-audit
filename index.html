@@ -4571,6 +4571,9 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
+      // 兼容 SSE 两种行尾:Gemini 用 \r\n\r\n(HTTP/CRLF 风格)· Anthropic/OpenAI 用 \n\n
+      // 不做 normalize 的话 Gemini 永远找不到分隔符 → events=0 → 「未收到任何输出」
+      buffer = buffer.replace(/\r\n/g, '\n');
 
       let sep;
       while ((sep = buffer.indexOf('\n\n')) !== -1) {
