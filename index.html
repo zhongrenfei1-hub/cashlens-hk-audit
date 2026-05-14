@@ -4462,7 +4462,7 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
       // ─── Gemini native API ───
       // URL: {baseUrl}/models/{model}:streamGenerateContent?alt=sse
       // Auth: X-goog-api-key(不是 Bearer)
-      // Body: contents/parts/inline_data schema(不是 messages/content)
+      // Body: contents/parts/inlineData schema(camelCase!不是 snake_case)
       // System prompt: top-level systemInstruction(不进 messages)
       //
       // ⚠️ Gemini 3.x token 预算策略(踩坑总结):
@@ -4485,7 +4485,22 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
           thinkingConfig: { thinkingBudget: 8192 },
         },
       };
-      response = await fetch(`${provider.baseUrl}/models/${model}:streamGenerateContent?alt=sse`, {
+      const geminiUrl = `${provider.baseUrl}/models/${model}:streamGenerateContent?alt=sse`;
+      // 诊断日志:让用户 F12 Console 一眼看到真实请求(脱敏 key + 不打印 base64 data)
+      try {
+        const partsSummary = body.contents.flatMap(c => c.parts.map(p =>
+          p.text ? `text(${p.text.length}字)` :
+          p.inlineData ? `${p.inlineData.mimeType}(${Math.round((p.inlineData.data||'').length*0.75/1024)}KB)` :
+          Object.keys(p).join(',')
+        ));
+        console.log('[Gemini] POST', geminiUrl, {
+          model, maxOutputTokens: 65536, thinkingBudget: 8192,
+          contentsCount: body.contents.length,
+          parts: partsSummary,
+          keyPrefix: (apiKey || '').slice(0, 6) + '…(' + (apiKey || '').length + ')',
+        });
+      } catch (e) { /* 日志失败不阻塞主流程 */ }
+      response = await fetch(geminiUrl, {
         method: 'POST',
         headers: {
           'X-goog-api-key': apiKey,
@@ -4547,75 +4562,102 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
   const decoder = new TextDecoder();
   let buffer = '';
   let usage = {};
+  // SSE 诊断计数(空输出时给用户看到底是网络断 / 没数据 / 解析失败 / Gemini 拒答)
+  let sseEvents = 0, sseParsed = 0, sseParseErr = 0, geminiTextChunks = 0;
+  let streamErr = null;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    let sep;
-    while ((sep = buffer.indexOf('\n\n')) !== -1) {
-      const event = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      const lines = event.split('\n');
-      let evType = '', evData = '';
-      for (const line of lines) {
-        if (line.startsWith('event:')) evType = line.slice(6).trim();
-        else if (line.startsWith('data:')) evData = (evData ? evData + '\n' : '') + line.slice(5).trim();
-      }
-      if (!evData || evData === '[DONE]') continue;
-      try {
-        const obj = JSON.parse(evData);
-        if (provider.format === 'anthropic') {
-          if (evType === 'content_block_delta' && obj.delta?.type === 'text_delta') {
-            onText(obj.delta.text);
-          }
-          if (evType === 'message_start' && obj.message?.usage) {
-            usage = { ...usage, ...obj.message.usage };
-          }
-          if (evType === 'message_delta' && obj.usage) {
-            usage = { ...usage, ...obj.usage };
-          }
-        } else if (provider.format === 'gemini') {
-          // Gemini SSE chunk:每条 data 是完整 JSON,包含 candidates[].content.parts[].text
-          const parts = obj.candidates?.[0]?.content?.parts;
-          if (parts) {
-            for (const p of parts) {
-              if (p.text) onText(p.text);
+      let sep;
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const event = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        sseEvents++;
+        const lines = event.split('\n');
+        let evType = '', evData = '';
+        for (const line of lines) {
+          if (line.startsWith('event:')) evType = line.slice(6).trim();
+          else if (line.startsWith('data:')) evData = (evData ? evData + '\n' : '') + line.slice(5).trim();
+        }
+        if (!evData || evData === '[DONE]') continue;
+        try {
+          const obj = JSON.parse(evData);
+          sseParsed++;
+          if (provider.format === 'anthropic') {
+            if (evType === 'content_block_delta' && obj.delta?.type === 'text_delta') {
+              onText(obj.delta.text);
+            }
+            if (evType === 'message_start' && obj.message?.usage) {
+              usage = { ...usage, ...obj.message.usage };
+            }
+            if (evType === 'message_delta' && obj.usage) {
+              usage = { ...usage, ...obj.usage };
+            }
+          } else if (provider.format === 'gemini') {
+            // Gemini SSE chunk:每条 data 是完整 JSON,包含 candidates[].content.parts[].text
+            const parts = obj.candidates?.[0]?.content?.parts;
+            if (parts) {
+              for (const p of parts) {
+                if (p.text) { onText(p.text); geminiTextChunks++; }
+              }
+            }
+            // capture finishReason 给空输出诊断用(STOP / MAX_TOKENS / SAFETY / RECITATION 等)
+            const fr = obj.candidates?.[0]?.finishReason;
+            if (fr) usage.finishReason = fr;
+            // 第一条 chunk 没 candidates / 没 usage → 留印记给诊断用
+            if (sseParsed === 1 && !obj.candidates && !obj.usageMetadata) {
+              console.warn('[Gemini] 首条 SSE 没有 candidates 也没有 usageMetadata · 原始 obj:', obj);
+              usage.__firstChunkShape = Object.keys(obj).join(',') || '(空对象)';
+            }
+            // Gemini usage · 末次 chunk 包含完整 usageMetadata · thoughtsTokenCount 是 thinking 用量
+            if (obj.usageMetadata) {
+              const meta = obj.usageMetadata;
+              usage = {
+                ...usage,  // 保留 finishReason
+                input_tokens: meta.promptTokenCount || 0,
+                output_tokens: meta.candidatesTokenCount || 0,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: meta.cachedContentTokenCount || 0,
+                thoughts_tokens: meta.thoughtsTokenCount || 0,
+              };
+            }
+          } else {
+            // OpenAI-compatible streaming chunk
+            const delta = obj.choices?.[0]?.delta;
+            if (delta?.content) onText(delta.content);
+            if (obj.usage) {
+              // Map OpenAI usage to common shape
+              usage = {
+                input_tokens: obj.usage.prompt_tokens || 0,
+                output_tokens: obj.usage.completion_tokens || 0,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+              };
             }
           }
-          // capture finishReason 给空输出诊断用(STOP / MAX_TOKENS / SAFETY / RECITATION 等)
-          const fr = obj.candidates?.[0]?.finishReason;
-          if (fr) usage.finishReason = fr;
-          // Gemini usage · 末次 chunk 包含完整 usageMetadata · thoughtsTokenCount 是 thinking 用量
-          if (obj.usageMetadata) {
-            const meta = obj.usageMetadata;
-            usage = {
-              ...usage,  // 保留 finishReason
-              input_tokens: meta.promptTokenCount || 0,
-              output_tokens: meta.candidatesTokenCount || 0,
-              cache_creation_input_tokens: 0,
-              cache_read_input_tokens: meta.cachedContentTokenCount || 0,
-              thoughts_tokens: meta.thoughtsTokenCount || 0,
-            };
-          }
-        } else {
-          // OpenAI-compatible streaming chunk
-          const delta = obj.choices?.[0]?.delta;
-          if (delta?.content) onText(delta.content);
-          if (obj.usage) {
-            // Map OpenAI usage to common shape
-            usage = {
-              input_tokens: obj.usage.prompt_tokens || 0,
-              output_tokens: obj.usage.completion_tokens || 0,
-              cache_creation_input_tokens: 0,
-              cache_read_input_tokens: 0,
-            };
-          }
+        } catch (e) {
+          sseParseErr++;
+          if (sseParseErr <= 3) console.warn('[SSE] parse error #' + sseParseErr, e.message, '· data:', evData.slice(0, 200));
         }
-      } catch (e) { /* ignore parse errors */ }
+      }
     }
+  } catch (e) {
+    // reader.read 抛出:网络 mid-stream 中断 / TLS 断连 / fetch abort 等
+    streamErr = e.message || String(e);
+    console.error('[Stream] reader 抛错', e);
   }
+
+  // 把流式统计塞 usage · 让外层诊断 toast 能显示真实情况
+  if (provider.format === 'gemini') {
+    usage.__sse = `events=${sseEvents} parsed=${sseParsed} parseErr=${sseParseErr} textChunks=${geminiTextChunks}`;
+    if (streamErr) usage.__streamErr = streamErr;
+    console.log('[Gemini] 流式结束统计:', usage.__sse, 'finishReason=' + (usage.finishReason || '(无)'), streamErr ? '· streamErr=' + streamErr : '');
+  }
+
   onUsage(usage);
 }
 
@@ -4659,14 +4701,17 @@ async function buildUserContent(userText, files, provider) {
   }
 
   // ───── Gemini native PDF mode ─────
-  // PDF + 图片都直接 inline_data base64 传服务端 · 浏览器免 PDF.js 转图
-  // Gemini parts schema:[{text:'...'}, {inline_data:{mime_type:'application/pdf',data:'base64'}}]
+  // PDF + 图片都直接 inlineData base64 传服务端 · 浏览器免 PDF.js 转图
+  // ⚠️ Gemini REST API 严格要求 camelCase 字段名(inlineData / mimeType)
+  //   snake_case (inline_data / mime_type) 是 proto 风格 · 实测 v1beta REST 会静默丢弃,
+  //   返回 200 + candidates 为空 → 用户看到「未收到任何输出」
+  // Gemini parts schema:[{text:'...'}, {inlineData:{mimeType:'application/pdf',data:'base64'}}]
   if (provider.format === 'gemini' && provider.pdfMode === 'native') {
     const parts = [{ text: enrichedUserText }];
     for (const f of binFiles) {
       parts.push({
-        inline_data: {
-          mime_type: f.type,  // 'application/pdf' / 'image/png' / 'image/jpeg' 等
+        inlineData: {
+          mimeType: f.type,  // 'application/pdf' / 'image/png' / 'image/jpeg' 等
           data: f.base64,
         },
       });
@@ -4917,8 +4962,14 @@ ${fileList}`;
         const inT = usage.input_tokens ?? '?';
         const thT = usage.thoughts_tokens ?? 0;
         const outT = usage.output_tokens ?? 0;
+        const sseStats = usage.__sse || '';          // 'events=N parsed=N parseErr=N textChunks=N'
+        const streamErr = usage.__streamErr || '';   // 'TypeError: ...' 之类
+        const firstShape = usage.__firstChunkShape || '';
         let diag = '', fix = '';
-        if (fr === 'MAX_TOKENS') {
+        if (streamErr) {
+          diag = `流式连接中断 · ${streamErr}`;
+          fix = '检查 VPN / 网络 · 重试 · 若 PDF >20MB 先拆小';
+        } else if (fr === 'MAX_TOKENS') {
           diag = `Gemini thinking 吃光 token 配额(thinking ${thT.toLocaleString()} · 实际输出 ${outT})`;
           fix = '<b>切到 Gemini Flash Latest</b>(thinking 量少 + 便宜 10 倍)· 设置 → 模型 → 选 Flash Latest';
         } else if (fr === 'SAFETY') {
@@ -4927,14 +4978,19 @@ ${fileList}`;
         } else if (fr === 'RECITATION') {
           diag = `Recitation filter(Gemini 拒绝照搬版权内容)`;
           fix = '换个 PDF 或修改 prompt 不让 AI 完整复述长篇内容';
+        } else if (fr === 'STOP' && outT === 0) {
+          diag = `Gemini 返回 STOP 但输出 0 token · 输入 ${inT.toLocaleString()} · 模型拒绝生成内容`;
+          fix = '常见原因:① PDF schema 没被识别(检查 Console 是否有 [Gemini] 首条 SSE 警告)② prompt 触发模型保守策略 → 换 model 或缩短 prompt';
         } else if (fr === '?' || !fr) {
-          diag = `流式连接异常 · 没收到 finishReason · 可能网络中断 / PDF 太大上传失败`;
-          fix = '检查网络 · PDF >50MB 先拆分 · F12 Console 看 streamGenerateContent 请求红字';
+          diag = `流式连接异常 · 没收到 finishReason · SSE 统计:${sseStats || '(无)'}${firstShape ? ' · 首 chunk 字段=' + firstShape : ''}`;
+          fix = '看 F12 Console 的 [Gemini] 日志 + Network 标签的 streamGenerateContent 请求 · 截图给我';
         } else {
           diag = `finishReason=${fr} · 输入 ${inT.toLocaleString()} · thinking ${thT.toLocaleString()} · 输出 ${outT}`;
           fix = '截图给我 · 把 Console 红字 + 上方诊断信息一并发过来';
         }
-        appendCard(`<div class="bg-warn/10 border border-warn/30 rounded-lg p-3 text-[13px] text-warn"><div class="font-medium mb-1">⚠ 未收到任何输出</div><div class="text-[12px] text-fg2 mb-1.5">诊断:${diag}</div><div class="text-[12px] text-fg2">解决:${fix}</div></div>`);
+        // 给开发者:把完整 usage 留在 console 方便 debug
+        console.warn('[Cashlens] 未收到任何输出 · usage:', usage);
+        appendCard(`<div class="bg-warn/10 border border-warn/30 rounded-lg p-3 text-[13px] text-warn"><div class="font-medium mb-1">⚠ 未收到任何输出</div><div class="text-[12px] text-fg2 mb-1.5">诊断:${diag}</div><div class="text-[12px] text-fg2 mb-1">解决:${fix}</div>${sseStats ? `<div class="text-[10.5px] text-fg3 mt-1 font-mono">SSE: ${sseStats}</div>` : ''}</div>`);
         return;
       }
       // Render full Markdown in artifact + populate tables/citations tabs
