@@ -4,3 +4,6 @@ node_modules/
 .env
 .vercel
 .netlify
+
+# 本地测试数据 — 真实公司财务数据 · 绝不进任何远程仓库 / CDN
+testdata/
