@@ -4464,6 +4464,12 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
       // Auth: X-goog-api-key(不是 Bearer)
       // Body: contents/parts/inline_data schema(不是 messages/content)
       // System prompt: top-level systemInstruction(不进 messages)
+      //
+      // ⚠️ maxOutputTokens 用 65536(Gemini outputTokenLimit) · 不要用 Cashlens 默认 16384:
+      // Gemini 3.x 默认 thinking · thinking tokens 占 maxOutputTokens 配额。
+      // 实测 "Pong" 一个词都用了 87 thinking tokens · 真实分析 thinking 量大,
+      // 16384 容易全部被 thinking 吃光导致 candidates 为空 / 输出截断。
+      // 65536 充足,Gemini 自动平衡 thinking + candidates。
       const body = {
         contents: messages.map(m => ({
           role: m.role === 'assistant' ? 'model' : 'user',
@@ -4472,7 +4478,7 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
             : [{ text: String(m.content || '') }],
         })),
         systemInstruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: { maxOutputTokens: maxTokens },
+        generationConfig: { maxOutputTokens: 65536 },
       };
       response = await fetch(`${provider.baseUrl}/models/${model}:streamGenerateContent?alt=sse`, {
         method: 'POST',
