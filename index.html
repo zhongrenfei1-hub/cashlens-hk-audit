@@ -4465,11 +4465,13 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
       // Body: contents/parts/inline_data schema(不是 messages/content)
       // System prompt: top-level systemInstruction(不进 messages)
       //
-      // ⚠️ maxOutputTokens 用 65536(Gemini outputTokenLimit) · 不要用 Cashlens 默认 16384:
-      // Gemini 3.x 默认 thinking · thinking tokens 占 maxOutputTokens 配额。
-      // 实测 "Pong" 一个词都用了 87 thinking tokens · 真实分析 thinking 量大,
-      // 16384 容易全部被 thinking 吃光导致 candidates 为空 / 输出截断。
-      // 65536 充足,Gemini 自动平衡 thinking + candidates。
+      // ⚠️ Gemini 3.x token 预算策略(踩坑总结):
+      // 1) maxOutputTokens 用 65536(Gemini 上限)· 不要用 Cashlens 默认 16384
+      // 2) **thinkingBudget 必须显式限制**:不限制时 Gemini 3.x 可能 thinking 几万 tokens 把
+      //    maxOutputTokens 全吃光 · candidates 留 0 → 用户看到「未收到任何输出」
+      // 3) thinkingBudget=8192 留 ~57K 给真实输出 · 8K thinking 对统计流水分析足够
+      //    (如果用户报告 thinking 不足 / 推理跳步,可调到 16384;不建议关 thinking=0,
+      //    Gemini 3 是 reasoning model · 关了精度大降)
       const body = {
         contents: messages.map(m => ({
           role: m.role === 'assistant' ? 'model' : 'user',
@@ -4478,7 +4480,10 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
             : [{ text: String(m.content || '') }],
         })),
         systemInstruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: { maxOutputTokens: 65536 },
+        generationConfig: {
+          maxOutputTokens: 65536,
+          thinkingConfig: { thinkingBudget: 8192 },
+        },
       };
       response = await fetch(`${provider.baseUrl}/models/${model}:streamGenerateContent?alt=sse`, {
         method: 'POST',
@@ -4902,7 +4907,7 @@ ${fileList}`;
     onUsage: (usage) => {
       if (firstChunk) {
         dotsCard.remove();
-        appendCard(`<div class="bg-warn/10 border border-warn/30 rounded-lg p-3 text-[13px] text-warn">⚠ 未收到任何输出。可能模型超载或 max_tokens 太小。</div>`);
+        appendCard(`<div class="bg-warn/10 border border-warn/30 rounded-lg p-3 text-[13px] text-warn">⚠ 未收到任何输出。常见原因:<br>1. Gemini thinking 太多吃光 token 配额 → 试试切到 <b>Gemini Flash Latest</b>(thinking 量少)<br>2. PDF 太大(>50MB)→ 拆分后再传<br>3. 网络中断(Console 看 streamGenerateContent 请求状态)<br>4. Safety filter 拦了(看 finishReason 是否 SAFETY · 改一下提示词避免敏感词)</div>`);
         return;
       }
       // Render full Markdown in artifact + populate tables/citations tabs
