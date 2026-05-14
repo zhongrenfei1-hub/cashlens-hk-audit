@@ -4578,20 +4578,25 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
           }
         } else if (provider.format === 'gemini') {
           // Gemini SSE chunk:每条 data 是完整 JSON,包含 candidates[].content.parts[].text
-          // 流式时同一 message 的多个 chunk 累积,每个 chunk 都带新 text 增量
           const parts = obj.candidates?.[0]?.content?.parts;
           if (parts) {
             for (const p of parts) {
               if (p.text) onText(p.text);
             }
           }
-          // Gemini usage 在 final chunk 或 metadata 字段:promptTokenCount / candidatesTokenCount
+          // capture finishReason 给空输出诊断用(STOP / MAX_TOKENS / SAFETY / RECITATION 等)
+          const fr = obj.candidates?.[0]?.finishReason;
+          if (fr) usage.finishReason = fr;
+          // Gemini usage · 末次 chunk 包含完整 usageMetadata · thoughtsTokenCount 是 thinking 用量
           if (obj.usageMetadata) {
+            const meta = obj.usageMetadata;
             usage = {
-              input_tokens: obj.usageMetadata.promptTokenCount || 0,
-              output_tokens: obj.usageMetadata.candidatesTokenCount || 0,
+              ...usage,  // 保留 finishReason
+              input_tokens: meta.promptTokenCount || 0,
+              output_tokens: meta.candidatesTokenCount || 0,
               cache_creation_input_tokens: 0,
-              cache_read_input_tokens: obj.usageMetadata.cachedContentTokenCount || 0,
+              cache_read_input_tokens: meta.cachedContentTokenCount || 0,
+              thoughts_tokens: meta.thoughtsTokenCount || 0,
             };
           }
         } else {
@@ -4907,7 +4912,29 @@ ${fileList}`;
     onUsage: (usage) => {
       if (firstChunk) {
         dotsCard.remove();
-        appendCard(`<div class="bg-warn/10 border border-warn/30 rounded-lg p-3 text-[13px] text-warn">⚠ 未收到任何输出。常见原因:<br>1. Gemini thinking 太多吃光 token 配额 → 试试切到 <b>Gemini Flash Latest</b>(thinking 量少)<br>2. PDF 太大(>50MB)→ 拆分后再传<br>3. 网络中断(Console 看 streamGenerateContent 请求状态)<br>4. Safety filter 拦了(看 finishReason 是否 SAFETY · 改一下提示词避免敏感词)</div>`);
+        // 用 usage 字段做精确诊断 · finishReason 决定真正原因
+        const fr = usage.finishReason || '?';
+        const inT = usage.input_tokens ?? '?';
+        const thT = usage.thoughts_tokens ?? 0;
+        const outT = usage.output_tokens ?? 0;
+        let diag = '', fix = '';
+        if (fr === 'MAX_TOKENS') {
+          diag = `Gemini thinking 吃光 token 配额(thinking ${thT.toLocaleString()} · 实际输出 ${outT})`;
+          fix = '<b>切到 Gemini Flash Latest</b>(thinking 量少 + 便宜 10 倍)· 设置 → 模型 → 选 Flash Latest';
+        } else if (fr === 'SAFETY') {
+          diag = `Safety filter 拦了(${fr})`;
+          fix = '改提示词避免敏感词 · 或换 model(Gemini 2.5 Flash 比 3 Pro 更宽松)';
+        } else if (fr === 'RECITATION') {
+          diag = `Recitation filter(Gemini 拒绝照搬版权内容)`;
+          fix = '换个 PDF 或修改 prompt 不让 AI 完整复述长篇内容';
+        } else if (fr === '?' || !fr) {
+          diag = `流式连接异常 · 没收到 finishReason · 可能网络中断 / PDF 太大上传失败`;
+          fix = '检查网络 · PDF >50MB 先拆分 · F12 Console 看 streamGenerateContent 请求红字';
+        } else {
+          diag = `finishReason=${fr} · 输入 ${inT.toLocaleString()} · thinking ${thT.toLocaleString()} · 输出 ${outT}`;
+          fix = '截图给我 · 把 Console 红字 + 上方诊断信息一并发过来';
+        }
+        appendCard(`<div class="bg-warn/10 border border-warn/30 rounded-lg p-3 text-[13px] text-warn"><div class="font-medium mb-1">⚠ 未收到任何输出</div><div class="text-[12px] text-fg2 mb-1.5">诊断:${diag}</div><div class="text-[12px] text-fg2">解决:${fix}</div></div>`);
         return;
       }
       // Render full Markdown in artifact + populate tables/citations tabs
