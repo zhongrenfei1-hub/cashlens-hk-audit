@@ -1237,14 +1237,13 @@ tailwind.config = {
     <div class="px-5 py-4 border-b border-subtle flex items-center justify-between">
       <div class="flex items-center gap-2">
         <span class="text-[15px] font-semibold">设置</span>
-        <span class="text-[10.5px] px-2 py-0.5 rounded-md gradient-bg text-white font-medium">Gemini 专属</span>
       </div>
       <button onclick="closeSettings()" class="w-7 h-7 rounded hover:bg-elevated text-fg3 text-lg">✕</button>
     </div>
     <div class="p-5 space-y-5">
 
-      <!-- ═════ AI 服务商(v9.0 锁定 Gemini · 后端代码仍 generic 留作未来扩展)═════ -->
-      <div>
+      <!-- ═════ AI 服务商(隐藏 · 已锁定 Gemini · DOM 保留供 JS 引用)═════ -->
+      <div class="hidden">
         <label class="block text-[12px] font-medium text-fg2 mb-1.5">AI 服务商 <span class="text-fg3 font-normal">· 已锁定 Google Gemini</span></label>
         <select id="providerSelect" disabled class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] focus-glow opacity-70 cursor-not-allowed">
           <option value="gemini" selected>Google Gemini(原生 API · PDF 直传)</option>
@@ -1266,17 +1265,19 @@ tailwind.config = {
           API Key
         </label>
         <div class="flex items-center gap-2">
-          <input id="apiKeyInput" type="password" placeholder="sk-..." autocomplete="off"
+          <input id="apiKeyInput" type="password" placeholder="AIza..." autocomplete="off"
                  class="flex-1 bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] font-mono focus-glow" />
           <button onclick="toggleKeyVisibility()" id="toggleKeyBtn" class="px-2.5 py-2 rounded-lg bg-elevated border border-subtle hover:border-line text-[11.5px] text-fg2">显示</button>
         </div>
         <div class="mt-2 text-[11px] text-fg3 leading-relaxed">
-          密钥只存本机 localStorage,浏览器直连 <span id="endpointLabel" class="font-mono">api.deepseek.com</span>(无中转)。若「Failed to fetch」→ 看上方 hint 或换中转 provider。
+          密钥只存本机浏览器,不上传服务器 · 去 <a href="https://aistudio.google.com/apikey" target="_blank" class="text-accent2 hover:underline">aistudio.google.com/apikey</a> 拿
+          <span id="endpointLabel" class="hidden"></span>
         </div>
         <div id="keyTestResult" class="mt-2 text-[11.5px] hidden"></div>
       </div>
 
-      <div>
+      <!-- 模型 + 系统提示词:隐藏 · 模型已锁 gemini-flash-latest · prompt 用 SYSTEM_PROMPT_V4 默认 -->
+      <div class="hidden">
         <label class="block text-[12px] font-medium text-fg2 mb-1.5">模型</label>
         <select id="modelSelect" class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] focus-glow"></select>
         <input id="customModel" type="text" placeholder="自定义模型 ID,例: gpt-4o"
@@ -1284,7 +1285,7 @@ tailwind.config = {
         <div class="mt-1.5 text-[11px] text-fg3" id="modelHint"></div>
       </div>
 
-      <details class="border border-subtle rounded-lg p-3">
+      <details class="border border-subtle rounded-lg p-3 hidden">
         <summary class="text-[12px] font-medium text-fg2 flex items-center justify-between">
           <span>高级:系统提示词 v4.0</span>
           <span class="text-fg3 text-[10.5px]">点击展开/折叠</span>
