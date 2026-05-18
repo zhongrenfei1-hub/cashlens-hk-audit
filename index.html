@@ -4485,7 +4485,10 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
         systemInstruction: { parts: [{ text: systemPrompt }] },
         generationConfig: {
           maxOutputTokens: 65536,
-          thinkingConfig: { thinkingBudget: 8192 },
+          thinkingConfig: { thinkingBudget: 24576 },
+          // temperature=0:统计/财务分析必须 deterministic · 同样输入同样输出 ·
+          // 杜绝随机性导致数字漂移 / 分类抖动(默认 1.0 对统计场景不可接受)
+          temperature: 0,
         },
       };
       const geminiUrl = `${provider.baseUrl}/models/${model}:streamGenerateContent?alt=sse`;
