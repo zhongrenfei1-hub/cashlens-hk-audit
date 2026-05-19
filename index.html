@@ -1947,17 +1947,9 @@ const PROVIDERS = {
     keyHint: 'AIza...',
     keyLink: 'https://aistudio.google.com/apikey',
     endpointLabel: 'generativelanguage.googleapis.com',
-    // 2026-05-14 用 ListModels API 实测拿的可用 ID(supportedGenerationMethods 含 generateContent 才列)
+    // 锁死 Gemini 3.1 Pro Preview · 用户要求只此一个 · 准确率最高
     models: [
-      { id: 'gemini-pro-latest',        label: 'Gemini Pro Latest (推荐 · 最新旗舰)',     in: 1.25,  out: 5    },
-      { id: 'gemini-flash-latest',      label: 'Gemini Flash Latest (推荐 · 最新便宜)',    in: 0.075, out: 0.3  },
-      { id: 'gemini-flash-lite-latest', label: 'Gemini Flash-Lite Latest (最便宜)',       in: 0.05,  out: 0.2  },
-      { id: 'gemini-3-pro-preview',     label: 'Gemini 3 Pro Preview (预览版旗舰)',       in: 1.25,  out: 5    },
-      { id: 'gemini-3-flash-preview',   label: 'Gemini 3 Flash Preview (预览版便宜)',     in: 0.075, out: 0.3  },
-      { id: 'gemini-3.1-pro-preview',   label: 'Gemini 3.1 Pro Preview (预览版 · 更新)',  in: 1.25,  out: 5    },
-      { id: 'gemini-2.5-pro',           label: 'Gemini 2.5 Pro (稳定旗舰)',               in: 0.625, out: 2.5  },
-      { id: 'gemini-2.5-flash',         label: 'Gemini 2.5 Flash (稳定便宜)',             in: 0.075, out: 0.3  },
-      { id: 'gemini-2.5-flash-lite',    label: 'Gemini 2.5 Flash-Lite (最稳定+最便宜)',   in: 0.05,  out: 0.2  },
+      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview (锁定 · 最高准确率)', in: 1.25, out: 5 },
     ],
     hint: '🌐 Google AI Studio · 走原生 API · PDF 直接 inline base64(浏览器免转图,服务端处理) · 大陆需 VPN',
     pdfMode: 'native',
@@ -2056,7 +2048,7 @@ const DEFAULTS = {
   // 之前内置 key 会暴露在前端源码 + GitHub 上,所以改架构由客户自带。
   // streamAI() 入口会检查 key 是否为空,空时自动 toast + openSettings()。
   apiKey:   '',
-  model:    'gemini-flash-latest',
+  model:    'gemini-3.1-pro-preview',
 };
 
 function getProvider() {
@@ -2080,13 +2072,13 @@ function getApiKey() {
 }
 function getModel() {
   const s = loadSettings();
-  if (s.customModel) return s.customModel;
-  if (s.model) return s.model;
-  // Use embedded default if user hasn't picked anything
-  if (!s.provider) return DEFAULTS.model;
-  // User picked a different provider — use its first model
   const p = PROVIDERS[getProvider()];
-  return p.models[0]?.id || '';
+  const allowed = (p?.models || []).map(m => m.id);
+  // 已锁定 · 若 localStorage 残留旧 model(用户老版本选过 flash-latest 等),强制改用 provider 第一个允许 ID
+  // 这能避免老用户刷新后还在用旧模型造成准确率问题
+  if (s.customModel && allowed.includes(s.customModel)) return s.customModel;
+  if (s.model && allowed.includes(s.model)) return s.model;
+  return p?.models?.[0]?.id || DEFAULTS.model;
 }
 function getModelInfo() {
   const m = getModel();
