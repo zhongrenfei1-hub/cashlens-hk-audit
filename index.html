@@ -4245,7 +4245,8 @@ function addMonthlyDetailSheets(wb, reportText) {
 // Sheet 5 (Miheng_Movement_Summary) prompt 让 AI 先输出若干 `META\t...` 行,
 // 再是空行 + 真正的列头 + 数据。split + filter(空行)后元数据顶在最前,
 // 通过判断行首是 "META" 把它们写到 sheet 顶部,空一行后再写列头 + 数据。
-function buildTsvSheet(wb, name, tsvText) {
+function buildTsvSheet(wb, name, tsvText, themeKey = 'purple') {
+  const theme = XLSX_THEMES[themeKey] || XLSX_THEMES.purple;
   const ws = wb.addWorksheet(name);
   const lines = tsvText.split(/\r?\n/).filter(l => l.length);
   if (!lines.length) return;
@@ -4267,11 +4268,12 @@ function buildTsvSheet(wb, name, tsvText) {
   ws.addRow(headers);
   const headerRowNum = ws.lastRow.number;
   const headerRow = ws.getRow(headerRowNum);
-  headerRow.font = { bold: true, size: 11 };
-  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7E6E6' } };
+  // 主题驱动 · header 颜色跟主表「月度矩阵」一致(之前所有模板硬编码灰色 · 客户感觉「都一样」)
+  headerRow.font = { bold: true, size: 11, color: { argb: theme.headerFg } };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: theme.headerBg } };
   headerRow.alignment = { vertical: 'middle' };
 
-  data.forEach(r => {
+  data.forEach((r, dataIdx) => {
     const coerced = r.map(cell => {
       const trimmed = String(cell).trim();
       if (trimmed === '') return '';
@@ -4282,7 +4284,13 @@ function buildTsvSheet(wb, name, tsvText) {
       }
       return cell;
     });
-    ws.addRow(coerced);
+    const newRow = ws.addRow(coerced);
+    // 主题驱动 · 隔行斑马(minimal 主题 zebraBg=null 时不上色)
+    if (theme.zebraBg && dataIdx % 2 === 1) {
+      newRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: theme.zebraBg } };
+      });
+    }
   });
 
   // Column widths: max(header, longest data string up to 40)
@@ -4359,11 +4367,12 @@ async function downloadXlsx(template = 'purple') {
       }
     }
 
-    // Sheets N+: 4 TSV blocks
+    // Sheets N+: 4 TSV blocks · 同样走主题(之前没传 theme 导致 4 个模板的 TSV sheets 都长得一样)
     const tsvBlocks = [...window.__latestReport.matchAll(/```tsv\s*\n([\s\S]*?)```/g)];
     const NAMES = ['Transaction_Detail', 'Monthly_Summary', 'Exclusion_Summary', 'Related_Party_Inflow', 'Miheng_Movement_Summary'];
+    const tsvTheme = template === 'monthlyTabs' ? 'purple' : template;
     tsvBlocks.forEach((m, i) => {
-      buildTsvSheet(wb, NAMES[i] || `Sheet ${i + 1}`, m[1].trim());
+      buildTsvSheet(wb, NAMES[i] || `Sheet ${i + 1}`, m[1].trim(), tsvTheme);
     });
 
     if (!matrix && tsvBlocks.length === 0) {
