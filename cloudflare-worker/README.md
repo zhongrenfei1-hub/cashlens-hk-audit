@@ -1,5 +1,17 @@
 # Cashlens · 通用 OpenAI 兼容反代 Worker
 
+> ⚠️ **v9.2 现状(2026-05-19):** 这个 Worker 是 v8.x 时代的 **OpenAI 兼容**反代 · Cashlens 自 v9.0 起锁定 **Gemini 原生 API**(`generativelanguage.googleapis.com`),已**不再使用此 Worker**。
+>
+> 如果要做大陆免 VPN 方案,需把 `worker.js` 重写为 **Gemini 反代**:
+> - upstream 改 `generativelanguage.googleapis.com/v1beta`
+> - auth header 改 `X-goog-api-key`(不是 `Authorization: Bearer`)
+> - 路径透传 `/models/{model}:streamGenerateContent?alt=sse`
+> - SSE 行尾仍是 `\r\n\r\n`(透传时不要 normalize)
+>
+> 文件保留作历史 + 未来重写参考。
+
+---
+
 把**任何** OpenAI 兼容后端(HTTP / HTTPS / 私有 IP / 无 CORS / 大陆访问外网)反代到 HTTPS + CORS 入口,解决浏览器拦截。
 
 ```
