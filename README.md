@@ -91,6 +91,29 @@ python3 -m http.server 8101
 部署到 Vercel:fork 仓库 → Vercel Import Git Repo → Deploy。
 可在 Vercel Settings → Deployment Protection 开 Password Protection 锁起来。
 
+## 🔬 开发 · 一键健康检查
+
+改动 prompt / 升级模型 / 部署后,跑这个验证准确率底线还在:
+
+```bash
+# 把样本 PDF 放 testdata/yedao_test.pdf · 或用 TEST_PDF=path/x.pdf 指定
+GEMINI_KEY=AIza... node scripts/verify.mjs
+```
+
+输出:
+```
+✅ finishReason=STOP
+✅ HKD ≈ 847,515.72 ±1
+✅ 有效笔数 = 6
+✅ 报告顶部含「材料评估」段
+✅ 报告末尾含「加总自检表」
+✅ 识别跨境收款平台
+
+🟢 整体: PASS
+```
+
+退出码 0=PASS 1=FAIL · 可作 CI gate / Vercel build hook / 手动 smoke test。
+
 ---
 
 ## 大陆免 VPN 方案
