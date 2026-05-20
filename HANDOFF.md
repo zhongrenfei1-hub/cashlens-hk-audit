@@ -459,34 +459,24 @@ https://zhongrenfei1-hub.github.io/cashlens-hk-audit/?provider=gemini&model=gemi
 
 ---
 
-## 6. 关键代码位置(2026-05-14 实测)
+## 6. 关键代码位置(2026-05-19 实测 · v9.2 行号)
 
-| 功能 | 起始行号(±) | 备注 |
+| 功能 | 行号 | 备注 |
 |---|---|---|
-| Header(顶部 nav) | 880 | 含响应式 |
-| 空状态 + 上传区 | 1020 | dropzone + 公司名 + 期间 + 高级折叠 |
-| Sidebar(历史项目) | 1110 | 含 `overflow-y-auto scrollbar min-h-0`(必要,防滚动失效) |
-| Artifact panel | 1175 | 4 tabs:报告/图表/数据表/Excel 预览 |
-| Settings Modal | 1235 | v9.0 锁定 Gemini · brand badge · dropdown disabled |
-| `SYSTEM_PROMPT_V4` | ~1335 | v8.2:核心使命 + 严格分类 + 不确定性处理 + 做账审计提醒 + 5 张 TSV schema + 长度策略 + 严格执行规则 |
-| `PROVIDERS` 配置 | ~1717 | 11 家 provider · v9.0 UI 锁定 gemini |
-| `DEFAULTS` | ~1798 | provider='gemini' / model='gemini-flash-latest' / apiKey='' |
-| URL auto-config | ~1738 | `applyUrlAutoConfig()` · `?provider=X&model=Y&key=Z` |
-| `loadSettings` / `saveSettings` | ~1934 | localStorage CRUD |
-| `testApiKey` | ~2155 | 3 个 format 分支(anthropic / gemini / openai) |
-| Toast / toastLoading | ~2330 | 含 audit-spinner |
-| auditSpinnerHTML | ~2347 | spinner 组件 xs/sm/md/lg/inline |
-| 多模态文件处理 | ~2390 | pdfToImages / pdfToText / ocrImageText / heic 转换 |
-| Tour `TOUR_STEPS` | ~3850 | 10 步教程 |
-| streamAI | ~4206 | 3 format 分支(anthropic / **gemini · 原生 API** / openai) · SSE 解析 |
-| buildUserContent | ~4313 | 多模态文件 · 3 mode(anthropic native / gemini native / image / text) |
-| `renderArtifactReport` | ~3083 | 入口:Hero + Markdown + chart + tables + Excel preview |
-| Excel 预览 tab | ~3490 | sheet 切换 + 列字母 + 行号 + 紫色 banner 表头 |
-| `XLSX_THEMES` + 导出 | ~3680 | 4 模板下拉 + buildMatrixSheet + addMonthlyDetailSheets + buildTsvSheet(支持 Sheet 5 META 头) |
-| Handoff to audit.html | ~3294 | `sendToAuditModule()` · localStorage[HANDOFF_KEY] |
-| `__chartInstances` | ~3920 | ResizeObserver fix(切到 charts tab 0×0 bug) |
-| 空输出诊断 toast | ~4905 | finishReason 分支显示精确诊断 |
-| Init `DOMContentLoaded` | ~5474 | `applyUrlAutoConfig()` + 各种初始化 |
+| `SYSTEM_PROMPT_V4` | **1363** | 第〇步文件分类 + 严格分类 + HSBC CR TO + 跨境平台白名单 + 5 TSV + 4 硬约束(含自检表) |
+| `PROVIDERS` 配置 | **1778** | 历史 11 个 provider · UI 锁定 gemini · `format === 'gemini'` 唯一活跃 |
+| `loadSettings` | **1995** | localStorage CRUD · key=`cashlens_settings_v2` |
+| `DEFAULTS` | **2063** | `provider='gemini'` / `model='gemini-3.5-flash'` |
+| `getModel()` | **2091** | 白名单校验 · localStorage 残留旧 ID 强制纠正到 3.5-flash |
+| `appendCard` | **2894** | 把 HTML 卡片追加到 chat stream |
+| `renderArtifactReport` | **3550** | 入口:Hero + Markdown + chart + tables + Excel preview |
+| `XLSX_THEMES` | **3985** | 3 主题(purple/minimal/blue · monthlyTabs 走 purple) |
+| `buildTsvSheet` | **4258** | v9.2 加 themeKey 参数 · header bg/fg + zebra 用主题色 |
+| `streamAI` | **4502** | 3 format 分支(anthropic / **gemini · 原生 API** / openai) · SSE `\r\n` normalize · 诊断计数 |
+| `buildUserContent` | **4747** | Gemini PDF 路径用 `inlineData`/`mimeType` camelCase |
+| 主流程 `onUsage` 诊断 toast | **5038** | finishReason 分支显示精确诊断 · 含 SSE 统计行 |
+| `TOUR_STEPS` | **5490** | 10 步教程 |
+| Init `DOMContentLoaded` | **5748** | `applyUrlAutoConfig()` + 各种初始化 |
 
 ---
 
