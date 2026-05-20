@@ -1947,9 +1947,10 @@ const PROVIDERS = {
     keyHint: 'AIza...',
     keyLink: 'https://aistudio.google.com/apikey',
     endpointLabel: 'generativelanguage.googleapis.com',
-    // 锁死 Gemini 3.1 Pro Preview · 用户要求只此一个 · 准确率最高
+    // 锁死 Gemini 3.5 Flash · 用户要求换成已发布的 3.5 · 实测 listModels 唯一可用的 3.5
+    // (2026-05-19 API 还没出 3.5 Pro,只有 gemini-3.5-flash)
     models: [
-      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview (锁定 · 最高准确率)', in: 1.25, out: 5 },
+      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash (锁定)', in: 0.075, out: 0.3 },
     ],
     hint: '🌐 Google AI Studio · 走原生 API · PDF 直接 inline base64(浏览器免转图,服务端处理) · 大陆需 VPN',
     pdfMode: 'native',
@@ -2048,7 +2049,7 @@ const DEFAULTS = {
   // 之前内置 key 会暴露在前端源码 + GitHub 上,所以改架构由客户自带。
   // streamAI() 入口会检查 key 是否为空,空时自动 toast + openSettings()。
   apiKey:   '',
-  model:    'gemini-3.1-pro-preview',
+  model:    'gemini-3.5-flash',
 };
 
 function getProvider() {
