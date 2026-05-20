@@ -8,10 +8,24 @@
 **部署:** ⭐ 主部署 **https://cashlens-hk-audit.vercel.app**(Vercel · auto-deploy on push)· GitHub Pages 仍并行可用但建议关
 **最新已推送:** [`9abbd67`] 锁 gemini-3.5-flash + 一系列准确率修复 · `git log -15` 看全部
 
-## 📦 本会话(2026-05-14 → 19)所有重大修复
+## 📦 本会话(2026-05-14 → 19)所有重大修复 · 19 commit + 1 GitHub Release
+
+按 commit 倒序(最新在最上):
 
 | Commit | 类别 | 修复 |
 |---|---|---|
+| `d93382c` | docs | HANDOFF Ch5 归档化 + Ch10 重写到 v9.2 stable plateau |
+| `5079bf7` | docs | HANDOFF Ch6 关键代码位置 · 行号实测刷新 |
+| `20831bb` | docs | HANDOFF Ch3 重写 + 5 大踩坑总结(SSE/CR TO/跨境平台/camelCase/thinking) |
+| `eea34ff` | docs | README 加「开发 · 一键健康检查」段指向 verify.mjs |
+| `f035744` | feat | **scripts/verify.mjs** 一键健康检查(6 assertion · 退出码 PASS/FAIL) |
+| `7f352c4` | docs | CHANGELOG.md v9.2 release notes 人类可读版 |
+| (Release) | — | **GitHub Release v9.2 公开** |
+| `e27bcd4` | docs | docs/SELL.md 传播素材库(微信/朋友圈/知乎/Twitter/elevator/FAQ) |
+| `373a764` | feat | cost chip 显示当前模型 + 价格 hover tooltip |
+| `d1d711b` | feat | **prompt 硬约束 4** · 报告末尾强制输出「加总自检表」(Sheet 1 = 2+3 校验) |
+| `f4d6150` | docs | README 重写 v9.2 landing copy(229 行 → 121 行) |
+| `47e01fd` | chore | 同步过时文案 + HANDOFF 顶部状态升 v9.2 |
 | `9abbd67` | feat | 模型锁 **gemini-3.5-flash**(API 唯一可用 3.5) |
 | `5b90871` | feat | 模型锁 gemini-3.1-pro-preview(已被 9abbd67 覆盖) |
 | `a1e0072` | fix | 4 个 Excel 模板 TSV sheets 用同一硬编码色 → 现在跟主题走 |
