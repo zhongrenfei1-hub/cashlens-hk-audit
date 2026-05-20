@@ -183,10 +183,10 @@ node -e "const fs=require('fs'); const html=fs.readFileSync('index.html','utf8')
 
 ---
 
-## 3. 技术架构现状(v9.0)
+## 3. 技术架构现状(v9.2)
 
 ### 形式
-纯前端单文件 HTML 应用(`index.html`),无后端。`audit.html` 是平级独立板块。
+纯前端单文件 HTML 应用(`index.html` ~270KB inline JS)· 无后端 · `audit.html` 是平级独立板块。
 
 ### CDN / 浏览器端库
 - Tailwind CSS(浏览器版)
@@ -196,67 +196,55 @@ node -e "const fs=require('fs'); const html=fs.readFileSync('index.html','utf8')
 - SheetJS / mammoth / heic2any / JSZip / sql.js / Tesseract.js(多格式文件解析)
 - Google Fonts:Inter / Instrument Serif / IBM Plex Mono
 
-### AI Provider(v9.0 重大变化 · 必读)
+### AI Provider(v9.2 锁死 · 单模型单 provider)
 
-**UI 层(用户看到的):** **只有 Google Gemini** · dropdown disabled · 不可切换。Settings header 有紫粉「Gemini 专属」badge。
+**UI 层 + 代码层:** **只有 `gemini-3.5-flash` 一个模型 · 不可切换**。
+- `PROVIDERS.gemini.models` 只剩 1 个 entry(`gemini-3.5-flash`)
+- `DEFAULTS.model = 'gemini-3.5-flash'`
+- `getModel()` 加白名单校验 · localStorage 残留旧 ID 强制纠正
+- 历史多 provider 代码(anthropic / openai / oneapi 等 9 个)仍在 PROVIDERS / streamAI / buildUserContent,但 UI 不暴露。`format === 'gemini'` 分支是当前唯一活跃路径。
 
-**代码层(后端):** PROVIDERS 对象仍有 11 个 provider 配置(deepseek / qwen / doubao / moonshot / zhipu / aipaibox / oneapi / openrouter / anthropic / openai / custom + gemini)· streamAI / buildUserContent / testApiKey 都保留 3 个 format 分支(anthropic / gemini / openai-compatible)。
-- **理由:** 留扩展余地 · 客户可能未来想加 Gemini Pro Vision 之外的模型
-- **如果想完整 cleanup 到只 Gemini:** 见 [P1 / P2 完整简化方案](#p1--p2-完整简化方案待选)
+### Gemini 原生协议
 
-### 默认 provider/model
-
-- `DEFAULTS.provider = 'gemini'`
-- `DEFAULTS.model = 'gemini-flash-latest'`
-- **推荐用 Flash Latest 而不是 Pro Latest** · Pro Latest thinking 量大容易出问题(见 [踩坑总结](#3-踩坑总结))
-
-### Gemini 原生协议(非 OpenAI 兼容端点)
-
-走 **原生 API** 而不是 OpenAI 兼容端点:
 - baseUrl: `https://generativelanguage.googleapis.com/v1beta`
-- URL: `{baseUrl}/models/{model}:streamGenerateContent?alt=sse`
+- URL: `{baseUrl}/models/gemini-3.5-flash:streamGenerateContent?alt=sse`
 - Auth: **`X-goog-api-key: AIza...`**(不是 Bearer)
 - Request body:
   ```js
   {
-    contents: [{role: 'user'|'model', parts: [{text}, {inline_data: {mime_type, data}}]}],
+    contents: [{role: 'user'|'model', parts: [{text}, {inlineData: {mimeType, data}}]}],
     systemInstruction: { parts: [{text: SYSTEM_PROMPT_V4}] },
     generationConfig: {
       maxOutputTokens: 65536,
-      thinkingConfig: { thinkingBudget: 8192 }  // ⚠️ 必须显式限制 thinking 防吃光配额
+      thinkingConfig: { thinkingBudget: 24576 },  // v9.2 提高 · 实测金标准 thinking 仅用 ~3K
+      temperature: 0                              // v9.2 新加 · 财务 deterministic 必须
     }
   }
   ```
-- SSE response:每个 chunk 是完整 JSON,提取 `candidates[0].content.parts[].text` 流式;`usageMetadata.promptTokenCount / candidatesTokenCount / thoughtsTokenCount`;`candidates[0].finishReason`
+- SSE response:**每个 event 用 `\r\n\r\n` 分隔**(CRLF 风格 · 不是 `\n\n` · 这是关键陷阱),每个 chunk 完整 JSON,提取 `candidates[0].content.parts[].text` 流式;`usageMetadata.promptTokenCount / candidatesTokenCount / thoughtsTokenCount`;`candidates[0].finishReason`
 
-### 3 踩坑总结
+### 5 大踩坑总结(本会话血泪填的)
 
-#### Pitfall A · `gemini-3-pro-latest` 不存在
+#### Pitfall A · SSE 行尾是 `\r\n\r\n` 不是 `\n\n`(ROOT CAUSE)
+Gemini `streamGenerateContent?alt=sse` 用 HTTP CRLF 风格 · 代码 `buffer.indexOf('\n\n')` 永远 -1 → events=0 → 用户看「未收到任何输出」。**Fix:** 每次 chunk 写入 buffer 后 `buffer.replace(/\r\n/g, '\n')` normalize。([`8290875`](https://github.com/zhongrenfei1-hub/cashlens-hk-audit/commit/8290875))
 
-Google 的 `-latest` 别名只有 3 个:`gemini-pro-latest` / `gemini-flash-latest` / `gemini-flash-lite-latest`。**Gemini 3.x 系列只有 `-preview` 后缀**(还在预览)。
+#### Pitfall B · HSBC「`CR TO XXX`」是出账不是进账
+描述里 `CR TO 132-XXXX` = Credit Transfer **TO** account = 转账给某账户 = **出账**(钱出去)· 看 `CR` 会误以为进账。**Fix:** prompt 强制以「金额在 Deposit 列 vs Withdrawal 列」判断方向,描述里的 CR/DR/CR TO/CR FROM 仅供参考。([`5a3ae19`](https://github.com/zhongrenfei1-hub/cashlens-hk-audit/commit/5a3ae19))
 
-实测 `ListModels` API 拿可用 ID:
-```bash
-curl "https://generativelanguage.googleapis.com/v1beta/models?key=$KEY" | jq '.models[].name'
-```
+#### Pitfall C · 跨境收款平台提现 ≠ 内部转账
+WorldFirst / Payoneer / PingPong / Stripe 等平台描述含 "FT INTERNAL TRANSFER" 但实质是**客户货款经平台中转** = 经营收入。旧 prompt 默认全排 → 经营收入 = 0(误判)。**Fix:** prompt 加 13 个平台白名单,默认计入有效进账。([`3f431c5`](https://github.com/zhongrenfei1-hub/cashlens-hk-audit/commit/3f431c5))
 
-#### Pitfall B · Gemini 3.x thinking 吃光 token 配额
+#### Pitfall D · Gemini parts schema 必须 camelCase
+REST v1beta API 严格要求 `inlineData` / `mimeType`(不是 `inline_data` / `mime_type`)· snake_case 会被静默丢弃 → candidates 空。([`dcf0786`](https://github.com/zhongrenfei1-hub/cashlens-hk-audit/commit/dcf0786))
 
-Gemini 3.x 默认 thinking · thinking tokens **计入 maxOutputTokens 配额**。
-- 实测"Pong"一个词都用 87 thinking tokens
-- 真实银行月结单分析 thinking 可能上万
-- 不限制 thinkingBudget · thinking 吃光 65536 → candidates 0 token → 用户看「未收到任何输出」
+#### Pitfall E · Gemini 3.x thinking 大量消耗
+默认 thinking 不限制 → 可能吃光 maxOutputTokens 配额 → 输出 0。**Fix:** `thinkingConfig.thinkingBudget = 24576`(v9.2)· `maxOutputTokens = 65536` · `temperature = 0`。
 
-**Fix(已做):** `thinkingConfig: { thinkingBudget: 8192 }` 留 ~57K 给真实输出。
+#### Pitfall F · `gemini-3-pro-latest` 不存在
+`-latest` 别名只有 3 个:`gemini-pro-latest` / `gemini-flash-latest` / `gemini-flash-lite-latest`。Gemini 3.x 系列只有 `-preview` 或 `-flash` 后缀。v9.2 锁定 `gemini-3.5-flash`(ListModels 实测可用)。
 
-#### Pitfall C · OpenAI 兼容端点不接 PDF inline base64
-
-Google 的 OpenAI 兼容端点(`/v1beta/openai/chat/completions`)对 PDF base64 inline 返回 400:
-```
-"Unsupported file URI type: data:application/pdf;base64,. File URI must be a File API URI, YouTube, or HTTPS"
-```
-
-**所以走原生 API 才能 inline PDF base64 喂 Gemini**(v9.0 现状)。
+#### Pitfall G · OpenAI 兼容端点不接 PDF inline base64
+Google `/v1beta/openai/chat/completions` 对 PDF base64 inline 返回 400 "Unsupported file URI type"。**所以走原生 API 才能 inline PDF base64 喂 Gemini**。
 
 ### Cloudflare Worker 反代(C 方案 · v9.0 不再活跃)
 
