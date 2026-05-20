@@ -1,11 +1,45 @@
-# Cashlens 交接文档 · v9.0
+# Cashlens 交接文档 · v9.2
 
 > 给下一个 AI / Claude / Codex 看。新会话开始时把这份贴进去,然后说:
 > "接着这份 HANDOFF.md 继续帮我做 Cashlens,我现在要:[新需求]"。
 
-**最后更新:** 2026-05-14
-**当前版本:** **v9.0 · Gemini 专属定位**(从多 provider 通用工具简化到 Gemini 专用)
-**最新已推送:** 见最新 commit · `git log -10`(本会话末:[`c5c4658`] fix gemini 空输出诊断 · capture finishReason + thoughtsTokenCount · 精确告知原因)
+**最后更新:** 2026-05-19
+**当前版本:** **v9.2 · Gemini 3.5 Flash 锁定 · 准确率大修**
+**部署:** ⭐ 主部署 **https://cashlens-hk-audit.vercel.app**(Vercel · auto-deploy on push)· GitHub Pages 仍并行可用但建议关
+**最新已推送:** [`9abbd67`] 锁 gemini-3.5-flash + 一系列准确率修复 · `git log -15` 看全部
+
+## 📦 本会话(2026-05-14 → 19)所有重大修复
+
+| Commit | 类别 | 修复 |
+|---|---|---|
+| `9abbd67` | feat | 模型锁 **gemini-3.5-flash**(API 唯一可用 3.5) |
+| `5b90871` | feat | 模型锁 gemini-3.1-pro-preview(已被 9abbd67 覆盖) |
+| `a1e0072` | fix | 4 个 Excel 模板 TSV sheets 用同一硬编码色 → 现在跟主题走 |
+| `5a3ae19` | **fix · 关键** | HSBC「**CR TO**」出账被误识别为进账(用户看到 Excel 行 9 错分类) |
+| `f25efb2` | feat | **prompt 加文件分类与分流**(类型 A 月结单/B 审计报告/C 其他) |
+| `3f431c5` | fix | 跨境收款平台提现不再误判内部转账(WorldFirst/Payoneer 等 13 个白名单) |
+| `dacf474` | fix | 准确率:`temperature=0` + `thinkingBudget` 8192→24576 |
+| `7d61510` | chore | 删 API Key 下方「去 aistudio 拿」提示文字 |
+| `6c397bd` | fix | 「选择文件夹」点一次弹两个对话框 / 第一次打不开 |
+| `8290875` | **fix · ROOT CAUSE** | **SSE `\r\n\r\n` 行尾**兼容 — 用户一直「未收到任何输出」的真正根因 |
+| `dcf0786` | fix | gemini parts schema 改 camelCase(`inlineData`/`mimeType`)+ 诊断升级 |
+| `d7cb769` | chore | Vercel 部署配置 + `testdata/` 永久 gitignore |
+
+## 🎯 当前确认有效的准确率基线
+
+实测金标准(`testdata/extracted/` 11 个 BEA 银行月结单,gemini-3.5-flash + temperature=0 + thinkingBudget=24576):
+- 实际业务收入:**HKD 2,889,887.50**(2025.04 – 2026.02)
+- 总笔数 / 有效 / 排除:32 / 20 / 12(含利息 + 现金存入 + 个人汇入排除)
+- 跑批 130 秒 · finishReason=STOP · 输出 14.7K 字符
+
+单 PDF 测试(`testdata/yedao_test.pdf` Citibank · 6 笔 WorldFirst 进账):
+- 经营收入:**HKD 847,840.86**(旧 prompt 误判 = 0 · 新 prompt 正确识别为跨境收款平台)
+
+## 🚧 已知尚未完成
+
+- HANDOFF 完整重写到 v9.2(本次只更新顶部状态 + commit 表 · 后续区段仍是 v9.0 内容)
+- 用户提到的「准确度差」原因还可能有其他银行(HSBC `CR TO` 已修 · 但用户的实际 HSBC PDF 我没有,无法本地验证)
+- Cloudflare Worker 反代(VPN 替代方案 · 仓库 `cloudflare-worker/` 已就绪但未指向)
 
 ---
 

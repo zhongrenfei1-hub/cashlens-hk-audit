@@ -1273,7 +1273,7 @@ tailwind.config = {
         <div id="keyTestResult" class="mt-2 text-[11.5px] hidden"></div>
       </div>
 
-      <!-- 模型 + 系统提示词:隐藏 · 模型已锁 gemini-flash-latest · prompt 用 SYSTEM_PROMPT_V4 默认 -->
+      <!-- 模型 + 系统提示词:隐藏 · 模型已锁 gemini-3.5-flash · prompt 用 SYSTEM_PROMPT_V4 默认 -->
       <div class="hidden">
         <label class="block text-[12px] font-medium text-fg2 mb-1.5">模型</label>
         <select id="modelSelect" class="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-[13px] focus-glow"></select>
@@ -4607,7 +4607,7 @@ async function streamAI({ systemPrompt, messages, onText, onUsage, onError }) {
       hint = '\n\n💡 提示:Key 无效。检查 ① 复制时是否带了引号空格 ② Key 是否还有效 ③ 服务商账户余额是否充足';
     } else if (response.status === 404) {
       // Gemini 404 几乎都是 model ID 不存在(Cashlens v9.0 锁定 Gemini · Base URL 不可编辑)
-      hint = '\n\n💡 提示:模型 ID 不存在 / 该 API 版本不支持该模型 · 去 Settings → 模型下拉选其他(推荐 gemini-pro-latest / gemini-flash-latest)· 或下拉选"自定义"手填实际可用 ID';
+      hint = '\n\n💡 提示:模型 ID 不存在 / 该 API 版本不支持该模型 · Cashlens 已锁 gemini-3.5-flash · 若该 ID 被 Google 下线请联系开发者更新代码';
     } else if (response.status === 429) {
       hint = '\n\n💡 提示:超限。账户余额不足或被限速,等几秒重试';
     } else if (/cors|cross-origin/i.test(msg)) {
