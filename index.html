@@ -907,8 +907,10 @@ tailwind.config = {
     <span class="text-fg3 hidden md:inline">已用</span>
     <span class="tabular text-fg3 hidden md:inline">0%</span>
   </div>
-  <div id="costChip" class="chip bg-surface border border-subtle text-fg2 hidden md:inline-flex">
-    <span class="w-1.5 h-1.5 rounded-full bg-fg3"></span>
+  <div id="costChip" class="chip bg-surface border border-subtle text-fg2 hidden md:inline-flex" title="Gemini 3.5 Flash · $0.075/M input · $0.3/M output">
+    <span class="w-1.5 h-1.5 rounded-full bg-accent2"></span>
+    <span class="tabular text-[10.5px] text-fg3">3.5-flash</span>
+    <span class="text-fg3">·</span>
     <span class="tabular">$0.00</span>
     <span class="text-fg3">·</span>
     <span>本次会话</span>
@@ -5250,12 +5252,16 @@ function updateCostChip(usage, accumulate = false) {
   else __sessionCost = cost;
   const totalIn = inTokens + cachedTokens;
   const symbol = mi.currency || '$';
+  // 显示当前模型 + 价格 + tokens(便于用户随时知道在用什么 + 花了多少)
   document.getElementById('costChip').innerHTML = `
     <span class="w-1.5 h-1.5 rounded-full bg-${__sessionCost > 5 ? 'warn' : 'ok'}"></span>
+    <span class="tabular text-[10.5px] text-fg3">3.5-flash</span>
+    <span class="text-fg3">·</span>
     <span class="tabular">${symbol}${__sessionCost.toFixed(2)}</span>
     <span class="text-fg3">·</span>
     <span class="tabular">${(totalIn/1000).toFixed(1)}K + ${(outTokens/1000).toFixed(1)}K</span>
   `;
+  document.getElementById('costChip').title = `Gemini 3.5 Flash · $${inRate}/M input · $${outRate}/M output · 本次会话 ${symbol}${__sessionCost.toFixed(4)}`;
   // Sync context chip
   updateCtxChip(totalIn + outTokens);
 }
@@ -5414,7 +5420,9 @@ function newSession() {
   renderStagedFiles();
   __sessionCost = 0;
   document.getElementById('costChip').innerHTML = `
-    <span class="w-1.5 h-1.5 rounded-full bg-fg3"></span>
+    <span class="w-1.5 h-1.5 rounded-full bg-accent2"></span>
+    <span class="tabular text-[10.5px] text-fg3">3.5-flash</span>
+    <span class="text-fg3">·</span>
     <span class="tabular">$0.00</span>
     <span class="text-fg3">·</span>
     <span>本次会话</span>
