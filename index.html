@@ -1743,6 +1743,21 @@ date\\tfc_currency\\t...\\trow_type
 ⚠️ **硬约束 1(debit-only)**:只读 debit / 存入列,credit / 出账列整行跳过;Sheet 1 original_amount 永远 ≥ 0,不存在任何负数。
 ⚠️ **硬约束 2(去做账审计化)**:正文绝不下做账审计结论 — 不写"应税/豁免"判断、不引 IRO/DIPN/SME-FRS/HKSA/BIR51 等税法/审计条款编号、不写"管理层声明""工作底稿""披露"等审计词汇。**例外**:【做账审计提醒事项】区块允许识别 5 类嫌疑(资本利得/境外/股息/知识产权/政府补贴)并标"建议补充凭证",但**仍不下精确税务结论**且**仍不引法条编号** — advisory(提示) 而非 conclusion(结论)。
 ⚠️ **硬约束 3(不猜测)**:任何不确定的交易必须进「待用户确认事项」清单,绝不自行猜测分类。
+⚠️ **硬约束 4(强制自检 · 必须显式输出)**:报告**末尾**必须输出一段「🔍 加总自检」markdown 表格,格式严格如下:
+
+\`\`\`
+🔍 **加总自检(用户必看)**
+
+| 项 | 金额 (HKD) | 笔数 |
+|---|---|---|
+| Sheet 1 hkd_equivalent 总和 | X,XXX,XXX.XX | NN |
+| Sheet 2 valid_inbound_hkd 各月合计 | X,XXX,XXX.XX | NN |
+| Sheet 3 total_hkd | X,XXX,XXX.XX | NN |
+| **Sheet 1 = Sheet 2 + Sheet 3 ?** | ✅ 通过 / ❌ 误差 X.XX | — |
+\`\`\`
+
+若误差 ≠ 0.00,必须**重算一遍** Sheet 1/2/3 直到对齐 · 不允许把不平差异藏在 note 字段 · 不允许说「四舍五入误差」糊弄。
+若 Sheet 1 笔数 = 0(全部文件都不是银行月结单),此自检表跳过。
 
 1. 高分辨率视觉提取所有交易字段,不遗漏任何一笔
 2. 加总自验,误差为 0.00(Sheet 1 hkd_equivalent 总和 = Sheet 2 valid_inbound_hkd + Sheet 3 total_hkd)
