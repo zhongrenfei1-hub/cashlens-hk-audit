@@ -428,7 +428,9 @@ https://zhongrenfei1-hub.github.io/cashlens-hk-audit/?provider=gemini&model=gemi
 
 ---
 
-## 5. 本会话(v8.0 → v9.0)所有重大改动
+## 5. 历史版本 v8.0 → v9.0 重大改动(归档 · v9.2 部分见顶部 commit 表)
+
+> 顶部「本会话(2026-05-14 → 19)所有重大修复」表是 v9.2 现状。下面这张表是 v8.0 → v9.0 的历史归档,保留给好奇接手 AI 看「为什么这样设计」的来龙去脉。
 
 按提交倒序:
 
@@ -573,20 +575,38 @@ prompt 里 ` ```tsv ` / ` ```json ` 等反引号必须**三重转义** `\\\`\\\`
 
 ---
 
-## 10. 下一步优先级建议
+## 10. 下一步优先级建议(v9.2 现状)
 
-按用户当前关注度排序:
+**Cashlens 当前处于 stable plateau** · 核心 bug 修完 · 准确率底线已验证 · 文档全部刷新 ·
+4 个 Excel 主题视觉差异化 · cost chip 显示运行模型 · `scripts/verify.mjs` 健康检查脚本 · GitHub Release v9.2 公开。
 
-1. **解决"未收到任何输出"** · 用户切到 Gemini Flash Latest 后测试 · 看新版诊断 toast 给出的 finishReason 精确判断
-2. **如果切 Flash 后仍报错**,看具体 finishReason:
-   - MAX_TOKENS 仍发生 → thinkingBudget 改 4096 或更小
-   - SAFETY → 换 model 或改 prompt
-   - 网络 / 无 finishReason → 让用户看 F12 Network 的 streamGenerateContent 状态
-3. **真实月结单跑通后**,可能用户反馈 Gemini 输出质量(prompt 是否要为 Gemini 优化措辞)
-4. **做账审计板块 audit.html** 仍是 placeholder · 客户期望真正的做账审计功能(prompt + UI + AI 调用 + 输出 schema)还没做
-5. **P1 / P2 完整简化** · 看用户是否后续提
-6. **HANDOFF / README 重写**(本次只更新 HANDOFF · README 仍可能带 v8.x 多 provider 描述)
+可能的下一波工作(按 ROI 排序):
+
+1. **🟡 等用户用真实新 PDF 跑 · 看是否还有 bank-specific 偏差**
+   - HSBC `CR TO` 已修(用户截图证据)· 但 HSBC `BE/F BALANCE` / 多账户对账等 corner case 未测
+   - 其他银行(渣打 / 中银 / 恒生 / 星展)用户暂无测试样本 · 实地跑会暴露新规则
+2. **🟢 P0 完整 dead code cleanup**(~50KB 减肥)
+   - PROVIDERS 删非 gemini/custom 9 个 entry(纯 dead UI)
+   - streamAI 删 anthropic / openai 分支(除非保留自定义 baseUrl 走 OpenAI 兼容)
+   - buildUserContent 删 anthropic native PDF 路径
+   - 风险中等 · 268KB → ~220KB
+3. **🟢 做账审计板块 audit.html**
+   - 当前是 placeholder · 用户期望真正的做账审计功能(prompt + UI + AI 调用 + 输出 schema)
+   - 需求确认后可大动
+4. **🟡 prompt cache 优化成本**
+   - 13K prompt 每次都喂 Gemini · 跑 11 PDF 一次 ~$0.005 · 高频跑能省 50%
+   - Gemini context caching API: https://ai.google.dev/gemini-api/docs/caching
+5. **🟡 Cloudflare Worker 反代部署**(大陆免 VPN 半解决)
+   - 仓库 `cloudflare-worker/` 已就绪 · 用户给个 cf account 就能 deploy
+6. **🟢 多语言 i18n**(英文版给海外用户)
+
+**不要做:**
+- 不要再扩 prompt 长度(13K → 16K 已接近边际效益临界 · 再加只是噪音)
+- 不要加多 LLM provider 切换(用户已明确锁 Gemini)
+- 不要加后端 server(隐私设计核心 · 数据不离开浏览器)
 
 ---
 
 **文档维护原则:** 每次大改完顺手更新这份 HANDOFF.md(尤其 prompt 改动 / 新增 commit 群 / 修重大 bug 后),让下一个 AI 一眼看懂状态。
+
+**一键健康检查:** `GEMINI_KEY=... node scripts/verify.mjs` 退出码 0=PASS · 改动后必跑。
